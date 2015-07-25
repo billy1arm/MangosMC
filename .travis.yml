@@ -1,0 +1,32 @@
+language: cpp
+
+# reduce clone time by only getting the latest commit and not the whole history (default for travis is 100)
+git:
+  depth: 1
+
+# send notifications to stack as well as email
+notifications:
+  slack: getmangos:yRgNBSgRQVh8WdfGEbT08Hit
+  
+# only run travis on the master branch
+branches:
+  only:
+    - master
+    - develop21
+
+# build on both Linux and OSX
+os:
+  - linux
+  - osx
+
+# build with both gcc and clang to ensure compatibility
+compiler:
+  - gcc
+  - clang
+ 
+script:
+  - test -d _build || mkdir _build
+  - test -d _install || mkdir _install
+  - cd _build
+  - cmake -DCMAKE_INSTALL_PREFIX=../_install ..
+  - make -j4
