@@ -34,6 +34,7 @@
 #include "G3D/Array.h"
 #include "G3D/Vector3.h"
 #include "G3D/Matrix3.h"
+#include "../game/Server/SharedCoreDefine.h"
 
 using namespace MaNGOS;
 

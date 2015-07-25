@@ -58,6 +58,7 @@
 #endif // HAVE_CONFIG_H
 
 #include "Platform/Define.h"
+#include "../../game/Server/SharedDefines.h"
 
 #if COMPILER == COMPILER_MICROSOFT
 #  pragma warning(disable:4996)                             // 'function': was declared deprecated

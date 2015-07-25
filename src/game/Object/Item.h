@@ -43,7 +43,6 @@ struct ItemSetEffect
     SpellEntry const* spells[8];
 };
 
-// [-ZERO] Need fix, possible uptodate in mangos-0.6
 enum InventoryResult
 {
     EQUIP_ERR_OK                                 = 0,
@@ -113,7 +112,23 @@ enum InventoryResult
     EQUIP_ERR_CANT_EQUIP_REPUTATION              = 64,      // ERR_CANT_EQUIP_REPUTATION
     EQUIP_ERR_TOO_MANY_SPECIAL_BAGS              = 65,      // ERR_TOO_MANY_SPECIAL_BAGS
     EQUIP_ERR_LOOT_CANT_LOOT_THAT_NOW            = 66,      // ERR_LOOT_CANT_LOOT_THAT_NOW
+#if defined(TBC)
+    EQUIP_ERR_ITEM_UNIQUE_EQUIPABLE              = 67,      // ERR_ITEM_UNIQUE_EQUIPPABLE
+    EQUIP_ERR_VENDOR_MISSING_TURNINS             = 68,      // ERR_VENDOR_MISSING_TURNINS
+    EQUIP_ERR_NOT_ENOUGH_HONOR_POINTS            = 69,      // ERR_NOT_ENOUGH_HONOR_POINTS
+    EQUIP_ERR_NOT_ENOUGH_ARENA_POINTS            = 70,      // ERR_NOT_ENOUGH_ARENA_POINTS
+    EQUIP_ERR_ITEM_MAX_COUNT_SOCKETED            = 71,      // ERR_ITEM_MAX_COUNT_SOCKETED
+    EQUIP_ERR_MAIL_BOUND_ITEM                    = 72,      // ERR_MAIL_BOUND_ITEM
+    EQUIP_ERR_NO_SPLIT_WHILE_PROSPECTING         = 73,      // ERR_INTERNAL_BAG_ERROR
+    EQUIP_ERR_BAG_FULL7                          = 74,      // ERR_BAG_FULL
+    EQUIP_ERR_ITEM_MAX_COUNT_EQUIPPED_SOCKETED   = 75,      // ERR_ITEM_MAX_COUNT_EQUIPPED_SOCKETED
+    EQUIP_ERR_ITEM_UNIQUE_EQUIPPABLE_SOCKETED    = 76,      // ERR_ITEM_UNIQUE_EQUIPPABLE_SOCKETED
+    EQUIP_ERR_TOO_MUCH_GOLD                      = 77,      // ERR_TOO_MUCH_GOLD
+    EQUIP_ERR_NOT_DURING_ARENA_MATCH             = 78,      // ERR_NOT_DURING_ARENA_MATCH
+    EQUIP_ERR_CANNOT_TRADE_THAT                  = 79,      // ERR_TRADE_BOUND_ITEM
+    EQUIP_ERR_PERSONAL_ARENA_RATING_TOO_LOW      = 80,      // ERR_CANT_EQUIP_RATING
     // any greater values show as "bag full"
+#endif
 };
 
 enum BuyResult

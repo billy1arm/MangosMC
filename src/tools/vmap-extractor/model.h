@@ -30,6 +30,7 @@
 #include "modelheaders.h"
 #include <vector>
 #include "vmapexport.h"
+#include "../../game/Server/SharedCoreDefine.h"
 
 class WMOInstance;
 class MPQFile;
@@ -115,11 +116,11 @@ class ModelInstance
         uint16 scale;
 #endif
         Vec3D pos, rot; /**< TODO */
-        //float sc introduced a regression bug in Mangos Zero, is Fine for other cores.
 #if defined(TBC)
         float sc; /**< TODO */
 #endif
 #if defined(CLASSIC)
+        //float sc introduced a regression bug in Mangos Zero, is Fine for other cores.
         unsigned int d1, scale;
         float w, sc;
 #endif

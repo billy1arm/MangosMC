@@ -29,6 +29,7 @@
 #include <cassert>
 #include <algorithm>
 #include <cstdio>
+#include "../../game/Server/SharedCoreDefine.h"
 
 Model::Model(std::string& filename) : filename(filename), vertices(0), indices(0)
 {

@@ -212,7 +212,9 @@ class SpellAuraHolder
         ~SpellAuraHolder();
     private:
         void UpdateAuraApplication();                       // called at charges or stack changes
+#if defined(CLASSIC)
         bool HeartbeatResist(uint32 diff);
+#endif
 
         SpellEntry const* m_spellProto;
 
@@ -237,7 +239,9 @@ class SpellAuraHolder
         bool m_isPassive: 1;
         bool m_isDeathPersist: 1;
         bool m_isRemovedOnShapeLost: 1;
+#if defined(CLASSIC)
         bool m_isHeartbeatSubject: 1;
+#endif
         bool m_deleted: 1;
 
         uint32 m_in_use;                                    // > 0 while in SpellAuraHolder::ApplyModifiers call/SpellAuraHolder::Update/etc
@@ -276,16 +280,25 @@ class Aura
         {
             // aura not have immediate effect at add/remove and handled by ID in other code place
         }
+#if defined(CLASSIC)
         void HandleModDetectRange(bool Apply, bool Real);
+#endif
         void HandleBindSight(bool Apply, bool Real);
         void HandleModPossess(bool Apply, bool Real);
         void HandlePeriodicDamage(bool Apply, bool Real);
         void HandleAuraDummy(bool Apply, bool Real);
+#if defined(TBC)
+        void HandleAuraPeriodicDummy(bool apply, bool Real);
+#endif
         void HandleModConfuse(bool Apply, bool Real);
         void HandleModCharm(bool Apply, bool Real);
         void HandleModFear(bool Apply, bool Real);
         void HandlePeriodicHeal(bool Apply, bool Real);
         void HandleModAttackSpeed(bool Apply, bool Real);
+#if defined(TBC)
+        void HandleModMeleeRangedSpeedPct(bool apply, bool Real);
+        void HandleModCombatSpeedPct(bool apply, bool Real);
+#endif
         void HandleModThreat(bool Apply, bool Real);
         void HandleModTaunt(bool Apply, bool Real);
         void HandleFeignDeath(bool Apply, bool Real);
@@ -322,6 +335,9 @@ class Aura
         void HandleDetectAmore(bool Apply, bool Real);
         void HandleAuraModIncreaseSpeed(bool Apply, bool Real);
         void HandleAuraModIncreaseMountedSpeed(bool Apply, bool Real);
+#if defined(TBC)
+        void HandleAuraModIncreaseFlightSpeed(bool Apply, bool Real);
+#endif
         void HandleAuraModDecreaseSpeed(bool Apply, bool Real);
         void HandleAuraModUseNormalSpeed(bool Apply, bool Real);
         void HandleAuraModIncreaseHealth(bool Apply, bool Real);
@@ -367,7 +383,9 @@ class Aura
         void HandleAuraModSkill(bool Apply, bool Real);
         void HandleModDamagePercentDone(bool Apply, bool Real);
         void HandleModPercentStat(bool Apply, bool Real);
+#if defined(CLASSIC)
         void HandleAurasVisible(bool Apply, bool Real);
+#endif
         void HandleModResistancePercent(bool Apply, bool Real);
         void HandleAuraModBaseResistancePCT(bool Apply, bool Real);
         void HandleModShieldBlockPCT(bool Apply, bool Real);
@@ -382,21 +400,49 @@ class Aura
         void HandleModUnattackable(bool Apply, bool Real);
         void HandleAuraModPacify(bool Apply, bool Real);
         void HandleAuraGhost(bool Apply, bool Real);
+#if defined(TBC)
+        void HandleAuraAllowFlight(bool Apply, bool Real);
+        void HandleModRating(bool apply, bool Real);
+        void HandleModTargetResistance(bool apply, bool Real);
+#endif
         void HandleAuraModAttackPowerPercent(bool apply, bool Real);
         void HandleAuraModRangedAttackPowerPercent(bool apply, bool Real);
+#if defined(TBC)
+        void HandleAuraModRangedAttackPowerOfStatPercent(bool apply, bool Real);
+#endif
         void HandleSpiritOfRedemption(bool apply, bool Real);
+#if defined(TBC)
+        void HandleModManaRegen(bool apply, bool Real);
+        void HandleComprehendLanguage(bool apply, bool Real);
+#endif
         void HandleShieldBlockValue(bool apply, bool Real);
         void HandleModSpellCritChanceShool(bool apply, bool Real);
         void HandleAuraRetainComboPoints(bool apply, bool Real);
         void HandleModSpellDamagePercentFromStat(bool apply, bool Real);
         void HandleModSpellHealingPercentFromStat(bool apply, bool Real);
+#if defined(TBC)
+        void HandleAuraModDispelResist(bool apply, bool Real);
+        void HandleModSpellDamagePercentFromAttackPower(bool apply, bool Real);
+        void HandleModSpellHealingPercentFromAttackPower(bool apply, bool Real);
+#endif
         void HandleAuraModPacifyAndSilence(bool Apply, bool Real);
+#if defined(TBC)
+        void HandleAuraModIncreaseMaxHealth(bool apply, bool Real);
+        void HandleAuraModExpertise(bool apply, bool Real);
+        void HandleForceMoveForward(bool apply, bool Real);
+#endif
         void HandleAuraModResistenceOfStatPercent(bool apply, bool Real);
         void HandleAuraPowerBurn(bool apply, bool Real);
         void HandleSchoolAbsorb(bool apply, bool Real);
         void HandlePreventFleeing(bool apply, bool Real);
         void HandleManaShield(bool apply, bool Real);
+#if defined(CLASSIC)
         void HandleInterruptRegen(bool apply, bool Real);
+#endif
+#if defined(TBC)
+        void HandleArenaPreparation(bool apply, bool Real);
+        void HandleAuraMirrorImage(bool apply, bool Real);
+#endif
 
         virtual ~Aura();
 
@@ -404,6 +450,9 @@ class Aura
         Modifier*       GetModifier()       { return &m_modifier; }
         Modifier const* GetModifier() const { return &m_modifier; }
         int32 GetMiscValue() const { return m_spellAuraHolder->GetSpellProto()->EffectMiscValue[m_effIndex]; }
+#if defined(TBC)
+        int32 GetMiscBValue() const { return m_spellAuraHolder->GetSpellProto()->EffectMiscValueB[m_effIndex]; }
+#endif
 
         SpellEntry const* GetSpellProto() const { return GetHolder()->GetSpellProto(); }
         uint32 GetId() const { return GetHolder()->GetSpellProto()->Id; }
@@ -463,6 +512,9 @@ class Aura
         void HandleShapeshiftBoosts(bool apply);
 
         void TriggerSpell();
+#if defined(TBC)
+        void TriggerSpellWithValue();
+#endif
 
         // more limited that used in future versions (spell_affect table based only), so need be careful with backporting uses
         bool isAffectedOnSpell(SpellEntry const* spell) const;
@@ -472,6 +524,9 @@ class Aura
         SpellAuraHolder const* GetHolder() const { return m_spellAuraHolder; }
 
         bool IsLastAuraOnHolder();
+#if defined(TBC)
+        bool HasMechanic(uint32 mechanic) const;
+#endif
     protected:
         Aura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster = NULL, Item* castItem = NULL);
 
@@ -506,7 +561,12 @@ class Aura
 
         SpellAuraHolder* const m_spellAuraHolder;
     private:
+#if defined(CLASSIC)
         void ReapplyAffectedPassiveAuras(Unit* target);
+#endif
+#if defined(TBC)
+        void ReapplyAffectedPassiveAuras(Unit* target, bool owner_mode);
+#endif
 };
 
 class AreaAura : public Aura

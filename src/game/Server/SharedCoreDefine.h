@@ -22,77 +22,9 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
-#ifndef MANGOS_H_AUTHCRYPT
-#define MANGOS_H_AUTHCRYPT
+#ifndef MANGOS_SHAREDCOREDEFINE_H
+#define MANGOS_SHAREDCOREDEFINE_H
 
-#include "Common/Common.h"
-#include <vector>
+#define CLASSIC
 
-class BigNumber;
-
-/**
-* @brief
-*
-*/
-class AuthCrypt
-{
-public:
-    /**
-    * @brief
-    *
-    */
-    AuthCrypt();
-    /**
-    * @brief
-    *
-    */
-    ~AuthCrypt();
-
-
-    /**
-    * @brief
-    *
-    */
-#if defined(CLASSIC)
-        void Init();
-#endif
-#if defined(TBC)
-    void Init(BigNumber* K);
-#endif
-#if defined(CLASSIC)
-        /**
-        * @brief
-        *
-        * @param key
-        * @param len
-        */
-        void SetKey(uint8* key, size_t len);
-#endif
-        /**
-         * @brief
-         *
-    * @param
-    * @param size_t
-    */
-    void DecryptRecv(uint8*, size_t);
-    /**
-    * @brief
-    *
-    * @param
-    * @param size_t
-    */
-    void EncryptSend(uint8*, size_t);
-
-    /**
-    * @brief
-    *
-    * @return bool
-    */
-    bool IsInitialized() { return _initialized; }
-
-private:
-    std::vector<uint8> _key; /**< TODO */
-    uint8 _send_i, _send_j, _recv_i, _recv_j; /**< TODO */
-    bool _initialized; /**< TODO */
-};
 #endif

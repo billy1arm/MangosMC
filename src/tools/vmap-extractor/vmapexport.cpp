@@ -53,6 +53,7 @@
 #include "mpq_libmpq.h"
 
 #include "vmapexport.h"
+#include "../../game/Server/SharedCoreDefine.h"
 
 //------------------------------------------------------------------------------
 // Defines

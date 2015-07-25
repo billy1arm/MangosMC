@@ -525,12 +525,12 @@ void Transport::Update(uint32 /*update_diff*/, uint32 /*p_time*/)
     m_timer = WorldTimer::getMSTime() % m_period;
     while (((m_timer - m_curr->first) % m_pathTime) > ((m_next->first - m_curr->first) % m_pathTime))
     {
-#if defined(CLASSIC)
+#if defined(TBC)
         DoEventIfAny(*m_curr, true);
 #endif
         MoveToNextWayPoint();
 
-#if defined(CLASSIC)
+#if defined(TBC)
         DoEventIfAny(*m_curr, false);
 #endif
         // first check help in case client-server transport coordinates de-synchronization

@@ -39,8 +39,17 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
 {
     uint8 bagIndex, slot;
     uint8 spell_count;                                      // number of spells at item, not used
+#if defined(TBC)
+    uint8 cast_count;                                       // next cast if exists (single or not)
+    ObjectGuid itemGuid;
+#endif
 
+#if defined(CLASSIC)
     recvPacket >> bagIndex >> slot >> spell_count;
+#endif
+#if defined(TBC)
+    recvPacket >> bagIndex >> slot >> spell_count >> cast_count >> itemGuid;
+#endif
 
     // TODO: add targets.read() check
     Player* pUser = _player;
@@ -60,8 +69,19 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
         return;
     }
 
-    DETAIL_LOG("WORLD: CMSG_USE_ITEM packet, bagIndex: %u, slot: %u, spell_count: %u , Item: %u, data length = %u", bagIndex, slot, spell_count, pItem->GetEntry(), (uint32)recvPacket.size());
+#if defined(TBC)
+    if (pItem->GetObjectGuid() != itemGuid)
+    {
+        recvPacket.rpos(recvPacket.wpos());                 // prevent spam at not read packet tail
+        pUser->SendEquipError(EQUIP_ERR_ITEM_NOT_FOUND, NULL, NULL);
+        return;
+    }
 
+    DETAIL_LOG("WORLD: CMSG_USE_ITEM packet, bagIndex: %u, slot: %u, spell_count: %u , cast_count: %u, Item: %u, data length = " SIZEFMTD, bagIndex, slot, spell_count, cast_count, pItem->GetEntry(), recvPacket.size());
+#endif
+#if defined(CLASSIC)
+    DETAIL_LOG("WORLD: CMSG_USE_ITEM packet, bagIndex: %u, slot: %u, spell_count: %u , Item: %u, data length = %u", bagIndex, slot, spell_count, pItem->GetEntry(), (uint32)recvPacket.size());
+#endif
     ItemPrototype const* proto = pItem->GetProto();
     if (!proto)
     {
@@ -93,6 +113,18 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
         pUser->SendEquipError(EQUIP_ERR_ITEM_NOT_FOUND, pItem, NULL);
         return;
     }
+
+#if defined(TBC)
+    // only allow conjured consumable, bandage, poisons (all should have the 2^21 item flag set in DB)
+    if (proto->Class == ITEM_CLASS_CONSUMABLE &&
+            !(proto->Flags & ITEM_FLAG_USEABLE_IN_ARENA) &&
+            pUser->InArena())
+    {
+        recvPacket.rpos(recvPacket.wpos());                 // prevent spam at not read packet tail
+        pUser->SendEquipError(EQUIP_ERR_NOT_DURING_ARENA_MATCH, pItem, NULL);
+        return;
+    }
+#endif
 
     if (pUser->IsInCombat())
     {
@@ -135,7 +167,12 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
         uint32 spellid = 0;
         for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
         {
+#if defined(CLASSIC)
             if (proto->Spells[i].SpellTrigger == ITEM_SPELLTRIGGER_ON_USE || proto->Spells[i].SpellTrigger == ITEM_SPELLTRIGGER_ON_NO_DELAY_USE)
+#endif
+#if defined(TBC)
+            if (proto->Spells[i].SpellTrigger == ITEM_SPELLTRIGGER_ON_USE)
+#endif
             {
                 spellid = proto->Spells[i].SpellId;
                 break;
@@ -144,7 +181,12 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
 
         // send spell error
         if (SpellEntry const* spellInfo = sSpellStore.LookupEntry(spellid))
+#if defined(CLASSIC)
             { Spell::SendCastResult(_player, spellInfo, SPELL_FAILED_BAD_TARGETS); }
+#endif
+#if defined(TBC)
+            Spell::SendCastResult(_player, spellInfo, cast_count, SPELL_FAILED_BAD_TARGETS);
+#endif
         return;
     }
 
@@ -152,7 +194,12 @@ void WorldSession::HandleUseItemOpcode(WorldPacket& recvPacket)
     if (!sScriptMgr.OnItemUse(pUser, pItem, targets))
     {
         // no script or script not process request by self
+#if defined(CLASSIC)
         pUser->CastItemUseSpell(pItem, targets);
+#endif
+#if defined(TBC)
+        pUser->CastItemUseSpell(pItem, targets, cast_count);
+#endif
     }
 }
 
@@ -287,7 +334,13 @@ void WorldSession::HandleGameObjectUseOpcode(WorldPacket& recv_data)
 void WorldSession::HandleCastSpellOpcode(WorldPacket& recvPacket)
 {
     uint32 spellId;
+#if defined(TBC)
+    uint8  cast_count;
+#endif
     recvPacket >> spellId;
+#if defined(TBC)
+    recvPacket >> cast_count;
+#endif
 
     // ignore for remote control state (for player case)
     Unit* mover = _player->GetMover();
@@ -297,9 +350,14 @@ void WorldSession::HandleCastSpellOpcode(WorldPacket& recvPacket)
         return;
     }
 
+#if defined(CLASSIC)
     DEBUG_LOG("WORLD: got cast spell packet, spellId - %u, data length = " SIZEFMTD,
               spellId, recvPacket.size());
-
+#endif
+#if defined(TBC)
+    DEBUG_LOG("WORLD: got cast spell packet, spellId - %u, cast_count: %u data length = " SIZEFMTD,
+              spellId, cast_count, recvPacket.size());
+#endif
     SpellEntry const* spellInfo = sSpellStore.LookupEntry(spellId);
 
     if (!spellInfo)
@@ -345,6 +403,9 @@ void WorldSession::HandleCastSpellOpcode(WorldPacket& recvPacket)
     }
 
     Spell* spell = new Spell(_player, spellInfo, false);
+#if defined(TBC)
+    spell->m_cast_count = cast_count;                       // set count of casts
+#endif
     spell->prepare(&targets);
 }
 
@@ -358,6 +419,12 @@ void WorldSession::HandleCancelCastOpcode(WorldPacket& recvPacket)
     Unit* mover = _player->GetMover();
     if (mover != _player && mover->GetTypeId() == TYPEID_PLAYER)
         { return; }
+
+#if defined(TBC)
+    // FIXME: hack, ignore unexpected client cancel Deadly Throw cast
+    if (spellId == 26679)
+        return;
+#endif
 
     if (_player->IsNonMeleeSpellCasted(false))
         { _player->InterruptNonMeleeSpells(false, spellId); }
@@ -520,3 +587,94 @@ void WorldSession::HandleSelfResOpcode(WorldPacket& /*recv_data*/)
         _player->SetUInt32Value(PLAYER_SELF_RES_SPELL, 0);
     }
 }
+
+#if defined(TBC)
+void WorldSession::HandleGetMirrorimageData(WorldPacket& recv_data)
+{
+    DEBUG_FILTER_LOG(LOG_FILTER_SPELL_CAST, "WORLD: CMSG_GET_MIRRORIMAGE_DATA");
+
+    ObjectGuid guid;
+    recv_data >> guid;
+
+    Creature* pCreature = _player->GetMap()->GetAnyTypeCreature(guid);
+
+    if (!pCreature)
+        return;
+
+    Unit::AuraList const& images = pCreature->GetAurasByType(SPELL_AURA_MIRROR_IMAGE);
+
+    if (images.empty())
+        return;
+
+    Unit* pCaster = images.front()->GetCaster();
+
+
+    // FIXME: need proper packet structure for 2.x, currently no items and no proper hair colors show.
+
+    WorldPacket data(SMSG_MIRRORIMAGE_DATA, 68);
+
+    data << guid;
+    data << (uint32)pCreature->GetDisplayId();
+
+    data << (uint8)pCreature->getRace();
+    data << (uint8)pCreature->getGender();
+    // data << (uint8)pCreature->getClass();                // added in 3.x
+
+    if (pCaster && pCaster->GetTypeId() == TYPEID_PLAYER)
+    {
+        Player* pPlayer = (Player*)pCaster;
+
+        // skin, face, hair, haircolor
+        data << (uint8)pPlayer->GetByteValue(PLAYER_BYTES, 0);
+        data << (uint8)pPlayer->GetByteValue(PLAYER_BYTES, 1);
+        data << (uint8)pPlayer->GetByteValue(PLAYER_BYTES, 2);
+        data << (uint8)pPlayer->GetByteValue(PLAYER_BYTES, 3);
+
+        // facial hair
+        data << (uint8)pPlayer->GetByteValue(PLAYER_BYTES_2, 0);
+
+        // guild id
+        data << (uint32)pPlayer->GetGuildId();
+
+        if (pPlayer->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_HIDE_HELM))
+            data << (uint32)0;
+        else
+            data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_HEAD);
+
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_SHOULDERS);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_BODY);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_CHEST);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_WAIST);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_LEGS);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_FEET);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_WRISTS);
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_HANDS);
+
+        if (pPlayer->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_HIDE_CLOAK))
+            data << (uint32)0;
+        else
+            data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_BACK);
+
+        data << (uint32)pPlayer->GetItemDisplayIdInSlot(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_TABARD);
+    }
+    else
+    {
+        // pCaster may have been NULL (usually not expected, but may happen at disconnect, etc)
+        // OR
+        // pCaster is not player, data is taken from CreatureDisplayInfoExtraEntry by model already
+        data << (uint8)0;
+        data << (uint8)0;
+        data << (uint8)0;
+        data << (uint8)0;
+
+        data << (uint8)0;
+
+        data << (uint32)0;
+
+        for (int i = 0; i < 11; ++i)
+            data << (uint32)0;
+    }
+
+    SendPacket(&data);
+}
+#endif

@@ -164,7 +164,12 @@ class SpellCastTargets
         float m_destX, m_destY, m_destZ;
         std::string m_strTarget;
 
+#if defined(CLASSIC)
         uint16 m_targetMask;
+#endif
+#if defined(TBC)
+        uint32 m_targetMask;
+#endif
 
     private:
         // objects (can be used at spell creating and after Update at casting
@@ -244,15 +249,22 @@ class Spell
         void EffectSummonChangeItem(SpellEffectIndex eff_idx);
         void EffectProficiency(SpellEffectIndex eff_idx);
         void EffectApplyAreaAura(SpellEffectIndex eff_idx);
+#if defined(CLASSIC)
         void EffectSummon(SpellEffectIndex eff_idx);
+#endif
+#if defined(TBC)
+        void EffectSummonType(SpellEffectIndex eff_idx);
+#endif
         void EffectLearnSpell(SpellEffectIndex eff_idx);
         void EffectDispel(SpellEffectIndex eff_idx);
         void EffectDualWield(SpellEffectIndex eff_idx);
         void EffectPickPocket(SpellEffectIndex eff_idx);
         void EffectAddFarsight(SpellEffectIndex eff_idx);
+#if defined(CLASSIC)
         void EffectSummonPossessed(SpellEffectIndex eff_idx);
         void EffectSummonWild(SpellEffectIndex eff_idx);
         void EffectSummonGuardian(SpellEffectIndex eff_idx);
+#endif
         void EffectHealMechanical(SpellEffectIndex eff_idx);
         void EffectTeleUnitsFaceCaster(SpellEffectIndex eff_idx);
         void EffectLearnSkill(SpellEffectIndex eff_idx);
@@ -264,6 +276,9 @@ class Spell
         void EffectSummonPet(SpellEffectIndex eff_idx);
         void EffectLearnPetSpell(SpellEffectIndex eff_idx);
         void EffectWeaponDmg(SpellEffectIndex eff_idx);
+#if defined(TBC)
+        void EffectForceCast(SpellEffectIndex eff_idx);
+#endif
         void EffectTriggerSpell(SpellEffectIndex eff_idx);
         void EffectTriggerMissileSpell(SpellEffectIndex eff_idx);
         void EffectThreat(SpellEffectIndex eff_idx);
@@ -277,13 +292,18 @@ class Spell
         void EffectStuck(SpellEffectIndex eff_idx);
         void EffectSummonPlayer(SpellEffectIndex eff_idx);
         void EffectActivateObject(SpellEffectIndex eff_idx);
+#if defined(CLASSIC)
         void EffectSummonTotem(SpellEffectIndex eff_idx);
+#endif
         void EffectEnchantHeldItem(SpellEffectIndex eff_idx);
         void EffectSummonObject(SpellEffectIndex eff_idx);
         void EffectResurrect(SpellEffectIndex eff_idx);
         void EffectParry(SpellEffectIndex eff_idx);
         void EffectBlock(SpellEffectIndex eff_idx);
         void EffectLeapForward(SpellEffectIndex eff_idx);
+#if defined(TBC)
+        void EffectLeapBack(SpellEffectIndex eff_idx);
+#endif
         void EffectTransmitted(SpellEffectIndex eff_idx);
         void EffectDisEnchant(SpellEffectIndex eff_idx);
         void EffectInebriate(SpellEffectIndex eff_idx);
@@ -293,8 +313,15 @@ class Spell
         void EffectSelfResurrect(SpellEffectIndex eff_idx);
         void EffectSkinning(SpellEffectIndex eff_idx);
         void EffectCharge(SpellEffectIndex eff_idx);
+#if defined(TBC)
+        void EffectCharge2(SpellEffectIndex eff_idx);
+        void EffectProspecting(SpellEffectIndex eff_idx);
+        void EffectRedirectThreat(SpellEffectIndex eff_idx);
+#endif
         void EffectSendTaxi(SpellEffectIndex eff_idx);
+#if defined(CLASSIC)
         void EffectSummonCritter(SpellEffectIndex eff_idx);
+#endif
         void EffectKnockBack(SpellEffectIndex eff_idx);
         void EffectPlayerPull(SpellEffectIndex eff_idx);
         void EffectDispelMechanic(SpellEffectIndex eff_idx);
@@ -309,8 +336,24 @@ class Spell
         void EffectAddExtraAttacks(SpellEffectIndex eff_idx);
         void EffectSpiritHeal(SpellEffectIndex eff_idx);
         void EffectSkinPlayerCorpse(SpellEffectIndex eff_idx);
+#if defined(TBC)
+        void EffectStealBeneficialBuff(SpellEffectIndex eff_idx);
+        void EffectUnlearnSpecialization(SpellEffectIndex eff_idx);
+        void EffectHealPct(SpellEffectIndex eff_idx);
+        void EffectEnergisePct(SpellEffectIndex eff_idx);
+        void EffectTriggerSpellWithValue(SpellEffectIndex eff_idx);
+        void EffectTriggerRitualOfSummoning(SpellEffectIndex eff_idx);
+        void EffectKillCreditGroup(SpellEffectIndex eff_idx);
+        void EffectQuestFail(SpellEffectIndex eff_idx);
+        void EffectPlaySound(SpellEffectIndex eff_idx);
+#endif
+#if defined(CLASSIC)
         void EffectSummonDemon(SpellEffectIndex eff_idx);
+#endif
         void EffectPlayMusic(SpellEffectIndex eff_idx);
+#if defined(TBC)
+        void EffectKnockBackFromPosition(SpellEffectIndex eff_idx);
+#endif
 
         Spell(Unit* caster, SpellEntry const* info, bool triggered, ObjectGuid originalCasterGUID = ObjectGuid(), SpellEntry const* triggeredBy = NULL);
         ~Spell();
@@ -352,6 +395,14 @@ class Spell
         void setState(uint32 state) { m_spellState = state; }
 
         void DoCreateItem(SpellEffectIndex eff_idx, uint32 itemtype);
+#if defined(TBC)
+        void DoSummon(SpellEffectIndex eff_idx);
+        void DoSummonWild(SpellEffectIndex eff_idx, uint32 forceFaction = 0);
+        void DoSummonGuardian(SpellEffectIndex eff_idx, uint32 forceFaction = 0);
+        void DoSummonTotem(SpellEffectIndex eff_idx, uint8 slot_dbc = 0);
+        void DoSummonCritter(SpellEffectIndex eff_idx, uint32 forceFaction = 0);
+        bool DoSummonPossessed(SpellEffectIndex eff_idx, uint32 forceFaction = 0);
+#endif
 
         void WriteSpellGoTargets(WorldPacket* data);
         void WriteAmmoToPacket(WorldPacket* data);
@@ -361,7 +412,12 @@ class Spell
         bool CheckTarget(Unit* target, SpellEffectIndex eff);
         bool CanAutoCast(Unit* target);
 
+#if defined(CLASSIC)
         static void  SendCastResult(Player* caster, SpellEntry const* spellInfo, SpellCastResult result);
+#endif
+#if defined(TBC)
+        static void  SendCastResult(Player* caster, SpellEntry const* spellInfo, uint8 cast_count, SpellCastResult result, bool isPetCastResult = false);
+#endif
         void SendCastResult(SpellCastResult result);
         void SendSpellStart();
         void SendSpellGo();
@@ -380,6 +436,9 @@ class Spell
         SpellEntry const* m_triggeredBySpellInfo;
         int32 m_currentBasePoints[MAX_EFFECT_INDEX];        // cache SpellEntry::CalculateSimpleValue and use for set custom base points
         Item* m_CastItem;
+#if defined(TBC)
+        uint8 m_cast_count;
+#endif
         SpellCastTargets m_targets;
 
         int32 GetCastTime() const { return m_casttime; }
@@ -436,6 +495,9 @@ class Spell
 
         void CleanupTargetList();
         void ClearCastItem();
+#if defined(TBC)
+        static void SelectMountByAreaAndSkill(Unit* target, SpellEntry const* parentSpell, uint32 spellId75, uint32 spellId150, uint32 spellId225, uint32 spellId300, uint32 spellIdSpecial);
+#endif
 
         typedef std::list<Unit*> UnitList;
 

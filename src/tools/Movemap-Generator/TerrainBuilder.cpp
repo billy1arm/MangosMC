@@ -30,6 +30,7 @@
 #include "VMapManager2.h"
 #include "MapTree.h"
 #include "ModelInstance.h"
+#include "../game/Server/SharedCoreDefine.h"
 
 
 namespace MMAP

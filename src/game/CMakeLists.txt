@@ -118,11 +118,17 @@ source_group("Warden\\Modules" FILES ${SRC_GRP_WARDEN_MODULES})
 #World and Handlers group
 file(GLOB SRC_GRP_WORLD_HANDLERS WorldHandlers/*.cpp WorldHandlers/*.h)
 source_group("World/Handlers" FILES ${SRC_GRP_WORLD_HANDLERS})
+
+#Remove files not used in the current core. ie. remove TBC files from classic etc.
 IF("${MANGOS_EXP}" STREQUAL "CLASSIC")
-    string(REGEX REPLACE "(UnitAuraProcHandler1)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(UnitAuraProcHandler_tbc.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SpellEffects_tbc.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SpellAuras_tbc.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
 endif()
 IF("${MANGOS_EXP}" STREQUAL "TBC")
-    string(REGEX REPLACE "(UnitAuraProcHandler0)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(UnitAuraProcHandler_classic.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SpellEffects_classic.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SpellAuras_classic.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
 endif()
 set(LIBRARY_SRCS
     ${SRC_GRP_AHBOT}

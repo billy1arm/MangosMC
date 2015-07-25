@@ -698,7 +698,7 @@ bool PlayerbotAI::TellMaster(string text, PlayerbotSecurityLevel securityLevel)
 
     if (!bot->isMoving() && !bot->IsInCombat() && bot->GetMapId() == master->GetMapId())
     {
-        if (!bot->isInFront(master, sPlayerbotAIConfig.sightDistance, M_PI / 2))
+        if (!bot->isInFront(master, sPlayerbotAIConfig.sightDistance, (float)M_PI / 2))
             bot->SetFacingTo(bot->GetAngle(master));
 
         bot->HandleEmoteCommand(EMOTE_ONESHOT_TALK);

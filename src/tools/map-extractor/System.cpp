@@ -22,6 +22,7 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
+#include "../game/Server/SharedCoreDefine.h"
 #include <stdio.h>
 #include <deque>
 #include <set>

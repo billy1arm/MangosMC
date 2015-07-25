@@ -27,11 +27,11 @@
 
 #include "Platform/Define.h"
 #include <cassert>
+#include "SharedCoreDefine.h"
 
 #ifndef MANGOS
 #define MANGOS
 #endif /* MANGOS */
-#define CLASSIC
 
 enum Gender
 {

@@ -50,6 +50,9 @@ void WorldSession::SendTradeStatus(TradeStatus status)
         case TRADE_STATUS_OPEN_WINDOW:
             data.Initialize(SMSG_TRADE_STATUS, 4 + 4);
             data << uint32(status);
+#if defined(TBC)
+            data << uint32(0);                              // added in 2.4.0
+#endif
             break;
         case TRADE_STATUS_CLOSE_WINDOW:
             data.Initialize(SMSG_TRADE_STATUS, 4 + 4 + 1 + 4);
@@ -90,6 +93,9 @@ void WorldSession::SendUpdateTrade(bool trader_state /*= true*/)
 
     WorldPacket data(SMSG_TRADE_STATUS_EXTENDED, (100));    // guess size
     data << uint8(trader_state ? 1 : 0);                    // send trader or own trade windows state (last need for proper show spell apply to non-trade slot)
+#if defined(TBC)
+    data << uint32(0);                                      // added in 2.4.0, this value must be equal to value from TRADE_STATUS_OPEN_WINDOW status packet (different value for different players to block multiple trades?)
+#endif
     data << uint32(TRADE_SLOT_COUNT);                       // trade slots count/number?, = next field in most cases
     data << uint32(TRADE_SLOT_COUNT);                       // trade slots count/number?, = prev field in most cases
     data << uint32(view_trade->GetMoney());                 // trader gold
@@ -110,6 +116,11 @@ void WorldSession::SendUpdateTrade(bool trader_state /*= true*/)
             data << item->GetGuidValue(ITEM_FIELD_GIFTCREATOR);
 
             data << uint32(item->GetEnchantmentId(PERM_ENCHANTMENT_SLOT));
+#if defined(TBC)
+            for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot < SOCK_ENCHANTMENT_SLOT + MAX_GEM_SOCKETS; ++enchant_slot)
+                data << uint32(item->GetEnchantmentId(EnchantmentSlot(enchant_slot)));
+#endif
+            // creator
             data << item->GetGuidValue(ITEM_FIELD_CREATOR);
             data << uint32(item->GetSpellCharges());        // charges
             data << uint32(item->GetItemSuffixFactor());    // SuffixFactor
@@ -122,7 +133,12 @@ void WorldSession::SendUpdateTrade(bool trader_state /*= true*/)
         }
         else
         {
+#if defined(CLASSIC)
             for (uint8 j = 0; j < 15; ++j)
+#endif
+#if defined(TBC)
+            for (uint8 j = 0; j < 18; ++j)
+#endif
                 { data << uint32(0); }
         }
     }
@@ -287,7 +303,6 @@ void WorldSession::HandleAcceptTradeOpcode(WorldPacket& recvPacket)
         my_trade->SetAccepted(false);
         return;
     }
-
 
     // not accept case incorrect money amount
     if (his_trade->GetMoney() > trader->GetMoney())
@@ -614,7 +629,12 @@ void WorldSession::HandleInitiateTradeOpcode(WorldPacket& recvPacket)
         return;
     }
 
+#if defined(CLASSIC)
     if (!sWorld.getConfig(CONFIG_BOOL_ALLOW_TWO_SIDE_INTERACTION_TRADE) && pOther->GetTeam() != _player->GetTeam())
+#endif
+#if defined(TBC)
+    if (pOther->GetTeam() != _player->GetTeam())
+#endif
     {
         SendTradeStatus(TRADE_STATUS_WRONG_FACTION);
         return;
