@@ -124,11 +124,26 @@ IF("${MANGOS_EXP}" STREQUAL "CLASSIC")
     string(REGEX REPLACE "(UnitAuraProcHandler_tbc.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
     string(REGEX REPLACE "(SpellEffects_tbc.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
     string(REGEX REPLACE "(SpellAuras_tbc.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+
+    #These are TBC files not present in Classic
+    string(REGEX REPLACE "(VoiceChatHandler.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(TransportSystem.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(TransportSystem.h)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SkillExtraItems.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SkillExtraItems.h)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SkillDiscovery.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(SkillDiscovery.h)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(ArenaTeamHandler.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
 endif()
+
 IF("${MANGOS_EXP}" STREQUAL "TBC")
     string(REGEX REPLACE "(UnitAuraProcHandler_classic.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
     string(REGEX REPLACE "(SpellEffects_classic.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
     string(REGEX REPLACE "(SpellAuras_classic.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+
+    #These are Classic files not present in TBC
+    string(REGEX REPLACE "(LFGMgr.cpp)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
+    string(REGEX REPLACE "(LFGMgr.h)" "" SRC_GRP_WORLD_HANDLERS "${SRC_GRP_WORLD_HANDLERS}")
 endif()
 set(LIBRARY_SRCS
     ${SRC_GRP_AHBOT}

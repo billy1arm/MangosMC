@@ -22,39 +22,13 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
-#ifndef MANGOSSERVER_CHANNELMGR_H
-#define MANGOSSERVER_CHANNELMGR_H
+#ifndef MANGOS_SKILLDISCOVERY_H
+#define MANGOS_SKILLDISCOVERY_H
 
 #include "Common.h"
-#include "Channel.h"
-#include "Policies/Singleton.h"
 
-#include <map>
-#include <string>
+class Player;
 
-class ChannelMgr
-{
-    public:
-        typedef std::map<std::wstring, Channel*> ChannelMap;
-        ChannelMgr() {}
-        ~ChannelMgr();
-
-#if defined(CLASSIC)
-        Channel* GetJoinChannel(const std::string &name);
-#endif
-#if defined(TBC)
-        Channel* GetJoinChannel(const std::string &name, uint32 channel_id);
-#endif
-        Channel* GetChannel(const std::string &name, Player* p, bool pkt = true);
-        void LeftChannel(const std::string &name);
-    private:
-        ChannelMap channels;
-        void MakeNotOnPacket(WorldPacket* data, const std::string &name);
-};
-
-class AllianceChannelMgr : public ChannelMgr {};
-class HordeChannelMgr    : public ChannelMgr {};
-
-ChannelMgr* channelMgr(Team team);
-
+void LoadSkillDiscoveryTable();
+uint32 GetSkillDiscoverySpell(uint32 skillId, uint32 spellId, Player* player);
 #endif

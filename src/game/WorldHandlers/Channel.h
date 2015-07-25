@@ -71,8 +71,16 @@ enum ChatNotify
     CHAT_PLAYER_INVITED_NOTICE        = 0x1D,               //+ "[%s] You invited %s to join the channel";
     CHAT_PLAYER_INVITE_BANNED_NOTICE  = 0x1E,               //+ "[%s] %s has been banned.";
     CHAT_THROTTLED_NOTICE             = 0x1F,               //+ "[%s] The number of messages that can be sent to this channel is limited, please wait to send another message.";
+#if defined(TBC)
+    CHAT_NOT_IN_AREA_NOTICE           = 0x20,               //+ "[%s] You are not in the correct area for this channel."; -- The user is trying to send a chat to a zone specific channel, and they're not physically in that zone.
+    CHAT_NOT_IN_LFG_NOTICE            = 0x21,               //+ "[%s] You must be queued in looking for group before joining this channel."; -- The user must be in the looking for group system to join LFG chat channels.
+    CHAT_VOICE_ON_NOTICE              = 0x22,               //+ "[%s] Channel voice enabled by %s.";
+    CHAT_VOICE_OFF_NOTICE             = 0x23                //+ "[%s] Channel voice disabled by %s.";
+                                        // 0x24 enable voice?
+#endif
 };
 
+#if defined(CLASSIC)
 /**
  * These are the channel id's for the special channels that's always there, this is currently only
  * used to find the Local Defense channel as it's muted by default except for if you've got PvP rank 9
@@ -87,6 +95,7 @@ enum ChannelIds
     CHANNEL_ID_LOOKING_FOR_GROUP = 24,
     CHANNEL_ID_GUILD_RECRUITMENT = 25
 };
+#endif
 
 class Channel
 {
@@ -163,7 +172,12 @@ class Channel
         };
 
     public:
+#if defined(CLASSIC)
         Channel(const std::string& name);
+#endif
+#if defined(TBC)
+        Channel(const std::string& name, uint32 channel_id);
+#endif
         std::string GetName() const { return m_name; }
         uint32 GetChannelId() const { return m_channelId; }
         bool IsConstant() const { return m_channelId != 0; }
@@ -251,6 +265,12 @@ class Channel
         void MakePlayerInvited(WorldPacket* data, const std::string& name);     //+ 0x1D
         void MakePlayerInviteBanned(WorldPacket* data, const std::string& name);//? 0x1E
         void MakeThrottled(WorldPacket* data);                                  //? 0x1F
+#if defined(TBC)
+        void MakeNotInArea(WorldPacket* data);                                  //? 0x20
+        void MakeNotInLfg(WorldPacket* data);                                   //? 0x21
+        void MakeVoiceOn(WorldPacket* data, ObjectGuid guid);                   //+ 0x22
+        void MakeVoiceOff(WorldPacket* data, ObjectGuid guid);                  //+ 0x23
+#endif
 
         void SendToAll(WorldPacket* data, ObjectGuid guid = ObjectGuid());
         void SendToOne(WorldPacket* data, ObjectGuid who);

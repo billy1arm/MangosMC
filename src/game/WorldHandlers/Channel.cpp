@@ -28,14 +28,30 @@
 #include "SocialMgr.h"
 #include "Chat.h"
 
+#if defined(CLASSIC)
 Channel::Channel(const std::string& name)
     : m_announce(true), m_moderate(false), m_name(name), m_flags(0), m_channelId(0)
+#endif
+#if defined(TBC)
+Channel::Channel(const std::string& name, uint32 channel_id)
+    : m_announce(true), m_moderate(false), m_name(name), m_flags(0), m_channelId(channel_id)
+#endif
 {
     // set special flags if built-in channel
+#if defined(CLASSIC)
     ChatChannelsEntry const* ch = GetChannelEntryFor(name);
+#endif
+#if defined(TBC)
+    ChatChannelsEntry const* ch = GetChannelEntryFor(channel_id);
+#endif
     if (ch)                                                 // it's built-in channel
     {
+#if defined(CLASSIC)
         m_channelId = ch->ChannelID;                        // only built-in channel have channel id != 0
+#endif
+#if defined(TBC)
+        channel_id = ch->ChannelID;                         // built-in channel
+#endif
         m_announce = false;                                 // no join/leave announces
 
         m_flags |= CHANNEL_FLAG_GENERAL;                    // for all built-in channels
@@ -85,6 +101,19 @@ void Channel::Join(Player* player, const char* password)
         SendToOne(&data, guid);
         return;
     }
+
+#if defined(TBC)
+    if (HasFlag(CHANNEL_FLAG_LFG) && sWorld.getConfig(CONFIG_BOOL_RESTRICTED_LFG_CHANNEL) && player->GetSession()->GetSecurity() == SEC_PLAYER &&
+            (player->GetGroup() || player->m_lookingForGroup.Empty()))
+    {
+        if (HasFlag(CHANNEL_FLAG_LFG) && sWorld.getConfig(CONFIG_BOOL_RESTRICTED_LFG_CHANNEL) && player->GetSession()->GetSecurity() == SEC_PLAYER)
+        {
+            MakeNotInLfg(&data);
+            SendToOne(&data, guid);
+            return;
+        }
+    }
+#endif
 
     if (player->GetGuildId() && (GetFlags() == 0x38))
         return;
@@ -560,20 +589,33 @@ void Channel::Say(Player* player, const char* text, uint32 lang)
     if (!text)
         return;
 
+#if defined(CLASSIC)
     uint32 sec = 0;
+#endif
     ObjectGuid guid = player->GetObjectGuid();
     Player* plr = sObjectMgr.GetPlayer(guid);
+#if defined(CLASSIC)
     bool speakInLocalDef = false;
+#endif
+#if defined(TBC)
+    bool speakInLocalDef = true;    // By Default everyone could chat in local defense
+#endif
     bool speakInWorldDef = false;
     if (plr)
     {
+#if defined(CLASSIC)
         sec = plr->GetSession()->GetSecurity();
+#endif
         if (plr->isGameMaster())
         {
+#if defined(CLASSIC)
             speakInLocalDef = true;
+#endif
             speakInWorldDef = true;
         }
         
+        // Not applicable for TBC onwards
+#if defined(CLASSIC)
         HonorRankInfo honorInfo = plr->GetHonorRankInfo();
         //We can speak in local defense if we're above this rank (see .h file)
         if (honorInfo.rank >= SPEAK_IN_LOCALDEFENSE_RANK)
@@ -581,6 +623,7 @@ void Channel::Say(Player* player, const char* text, uint32 lang)
         // Are we not allowed to speak in WorldDefense at all?
         // if (honorInfo.rank >= SPEAK_IN_WORLDDEFENSE_RANK)
         //     speakInWorldDef = true;
+#endif
     }
     
     if (!IsOn(guid))
@@ -591,9 +634,14 @@ void Channel::Say(Player* player, const char* text, uint32 lang)
         return;
     }
 
+#if defined(CLASSIC)
     else if (m_players[guid].IsMuted() ||
              (GetChannelId() == CHANNEL_ID_LOCAL_DEFENSE && !speakInLocalDef) ||
              (GetChannelId() == CHANNEL_ID_WORLD_DEFENSE && !speakInWorldDef))
+#endif
+#if defined(TBC)
+    if (m_players[guid].IsMuted())
+#endif
     {
         WorldPacket data;
         MakeMuted(&data);
@@ -613,7 +661,12 @@ void Channel::Say(Player* player, const char* text, uint32 lang)
     if (sWorld.getConfig(CONFIG_BOOL_ALLOW_TWO_SIDE_INTERACTION_CHANNEL))
         lang = LANG_UNIVERSAL;
     WorldPacket data;
+#if defined(CLASSIC)
     ChatHandler::BuildChatPacket(data, CHAT_MSG_CHANNEL, text, Language(lang), player->GetChatTag(), guid, player->GetName(), ObjectGuid(), "", m_name.c_str(), player->GetHonorRankInfo().rank);
+#endif
+#if defined(TBC)
+    ChatHandler::BuildChatPacket(data, CHAT_MSG_CHANNEL, text, Language(lang), player->GetChatTag(), guid, player->GetName(), ObjectGuid(), "", m_name.c_str());
+#endif
     SendToAll(&data, !m_players[guid].IsModerator() ? guid : ObjectGuid());
 }
 
@@ -934,12 +987,57 @@ void Channel::MakeThrottled(WorldPacket* data)
     MakeNotifyPacket(data, CHAT_THROTTLED_NOTICE);
 }
 
+#if defined(TBC)
+void Channel::MakeNotInArea(WorldPacket* data)
+{
+    MakeNotifyPacket(data, CHAT_NOT_IN_AREA_NOTICE);
+}
+
+void Channel::MakeNotInLfg(WorldPacket* data)
+{
+    MakeNotifyPacket(data, CHAT_NOT_IN_LFG_NOTICE);
+}
+
+void Channel::MakeVoiceOn(WorldPacket* data, ObjectGuid guid)
+{
+    MakeNotifyPacket(data, CHAT_VOICE_ON_NOTICE);
+    *data << ObjectGuid(guid);
+}
+
+void Channel::MakeVoiceOff(WorldPacket* data, ObjectGuid guid)
+{
+    MakeNotifyPacket(data, CHAT_VOICE_OFF_NOTICE);
+    *data << ObjectGuid(guid);
+}
+#endif
+
 void Channel::JoinNotify(ObjectGuid guid)
 {
-    // [-ZERO] Feature doesn't exist in 1.x.
+#if defined(TBC)
+    WorldPacket data;
+
+    if (IsConstant())
+        data.Initialize(SMSG_USERLIST_ADD, 8 + 1 + 1 + 4 + GetName().size() + 1);
+    else
+        data.Initialize(SMSG_USERLIST_UPDATE, 8 + 1 + 1 + 4 + GetName().size() + 1);
+
+    data << ObjectGuid(guid);
+    data << uint8(GetPlayerFlags(guid));
+    data << uint8(GetFlags());
+    data << uint32(GetNumPlayers());
+    data << GetName();
+    SendToAll(&data);
+#endif
 }
 
 void Channel::LeaveNotify(ObjectGuid guid)
 {
-    // [-ZERO] Feature doesn't exist in 1.x.
+#if defined(TBC)
+    WorldPacket data(SMSG_USERLIST_REMOVE, 8 + 1 + 4 + GetName().size() + 1);
+    data << ObjectGuid(guid);
+    data << uint8(GetFlags());
+    data << uint32(GetNumPlayers());
+    data << GetName();
+    SendToAll(&data);
+#endif
 }

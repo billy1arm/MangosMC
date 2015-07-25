@@ -29,8 +29,15 @@ void WorldSession::HandleJoinChannelOpcode(WorldPacket& recvPacket)
 {
     DEBUG_LOG("WORLD: Received opcode %s (%u, 0x%X)", recvPacket.GetOpcodeName(), recvPacket.GetOpcode(), recvPacket.GetOpcode());
 
+#if defined(TBC)
+    uint32 channel_id;
+    uint8 unknown1, unknown2;
+#endif
     std::string channelName, pass;
 
+#if defined(TBC)
+    recvPacket >> channel_id >> unknown1 >> unknown2;
+#endif
     recvPacket >> channelName;
 
     if (channelName.empty())
@@ -38,6 +45,7 @@ void WorldSession::HandleJoinChannelOpcode(WorldPacket& recvPacket)
 
     recvPacket >> pass;
 
+#if defined(CLASSIC)
     uint32 channelId = 0;
     char tmpStr[255];
 
@@ -90,10 +98,15 @@ void WorldSession::HandleJoinChannelOpcode(WorldPacket& recvPacket)
             }
         }
     }
-
+#endif
     if (ChannelMgr* cMgr = channelMgr(_player->GetTeam()))
         //the channel id needs to be checkd for lfg (explanation?)
+#if defined(CLASSIC)
         if (Channel* chn = cMgr->GetJoinChannel(channelName))
+#endif
+#if defined(TBC)
+        if (Channel* chn = cMgr->GetJoinChannel(channelName, channel_id))
+#endif
             chn->Join(_player, pass.c_str());
 }
 
@@ -101,9 +114,13 @@ void WorldSession::HandleLeaveChannelOpcode(WorldPacket& recvPacket)
 {
     DEBUG_LOG("WORLD: Received opcode %s (%u, 0x%X)", recvPacket.GetOpcodeName(), recvPacket.GetOpcode(), recvPacket.GetOpcode());
     // recvPacket.hexlike();
-    // uint32 unk;
+#if defined(TBC)
+    uint32 unk;
+#endif
     std::string channelname;
-    // recvPacket >> unk;                                   // channel id?
+#if defined(TBC)
+    recvPacket >> unk;                                      // channel id?
+#endif
     recvPacket >> channelname;
 
     if (channelname.empty())

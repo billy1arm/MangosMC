@@ -22,39 +22,32 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
-#ifndef MANGOSSERVER_CHANNELMGR_H
-#define MANGOSSERVER_CHANNELMGR_H
-
 #include "Common.h"
-#include "Channel.h"
-#include "Policies/Singleton.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
+#include "Opcodes.h"
+#include "Log.h"
 
-#include <map>
-#include <string>
-
-class ChannelMgr
+void WorldSession::HandleVoiceSessionEnableOpcode(WorldPacket& recv_data)
 {
-    public:
-        typedef std::map<std::wstring, Channel*> ChannelMap;
-        ChannelMgr() {}
-        ~ChannelMgr();
+    DEBUG_LOG("WORLD: CMSG_VOICE_SESSION_ENABLE");
+    // uint8 isVoiceEnabled, uint8 isMicrophoneEnabled
+    recv_data.read_skip<uint8>();
+    recv_data.read_skip<uint8>();
+    recv_data.hexlike();
+}
 
-#if defined(CLASSIC)
-        Channel* GetJoinChannel(const std::string &name);
-#endif
-#if defined(TBC)
-        Channel* GetJoinChannel(const std::string &name, uint32 channel_id);
-#endif
-        Channel* GetChannel(const std::string &name, Player* p, bool pkt = true);
-        void LeftChannel(const std::string &name);
-    private:
-        ChannelMap channels;
-        void MakeNotOnPacket(WorldPacket* data, const std::string &name);
-};
+void WorldSession::HandleChannelVoiceOnOpcode(WorldPacket& recv_data)
+{
+    DEBUG_LOG("WORLD: CMSG_CHANNEL_VOICE_ON");
+    // Enable Voice button in channel context menu
+    recv_data.hexlike();
+}
 
-class AllianceChannelMgr : public ChannelMgr {};
-class HordeChannelMgr    : public ChannelMgr {};
-
-ChannelMgr* channelMgr(Team team);
-
-#endif
+void WorldSession::HandleSetActiveVoiceChannel(WorldPacket& recv_data)
+{
+    DEBUG_LOG("WORLD: CMSG_SET_ACTIVE_VOICE_CHANNEL");
+    recv_data.read_skip<uint32>();
+    recv_data.read_skip<char*>();
+    recv_data.hexlike();
+}

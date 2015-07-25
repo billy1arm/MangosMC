@@ -50,7 +50,12 @@ ChannelMgr::~ChannelMgr()
     channels.clear();
 }
 
+#if defined(CLASSIC)
 Channel* ChannelMgr::GetJoinChannel(const std::string &name)
+#endif
+#if defined(TBC)
+Channel* ChannelMgr::GetJoinChannel(const std::string &name, uint32 channelId)
+#endif
 {
     std::wstring wname;
     Utf8toWStr(name, wname);
@@ -58,7 +63,12 @@ Channel* ChannelMgr::GetJoinChannel(const std::string &name)
 
     if (channels.find(wname) == channels.end())
     {
+#if defined(CLASSIC)
         Channel* nchan = new Channel(name);
+#endif
+#if defined(TBC)
+        Channel* nchan = new Channel(name, channelId);
+#endif
         channels[wname] = nchan;
         return nchan;
     }

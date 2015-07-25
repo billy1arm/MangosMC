@@ -273,8 +273,13 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recv_data)
     switch (etime)
     {
         case 1*MIN_AUCTION_TIME:
+#if defined(TBC)
+        case 2*MIN_AUCTION_TIME:
+#endif
         case 4*MIN_AUCTION_TIME:
+#if defined(CLASSIC)
         case 12*MIN_AUCTION_TIME:
+#endif
             break;
         default:
             return;
@@ -306,13 +311,23 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recv_data)
 
     if (!it->CanBeTraded())
     {
+#if defined(CLASSIC)
         SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_ITEM_NOT_FOUND);
+#endif
+#if defined(TBC)
+        SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_CANNOT_TRADE_THAT);
+#endif
         return;
     }
 
     if ((it->GetProto()->Flags & ITEM_FLAG_CONJURED) || it->GetUInt32Value(ITEM_FIELD_DURATION))
     {
+#if defined(CLASSIC)
         SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_ITEM_NOT_FOUND);
+#endif
+#if defined(TBC)
+        SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_CANNOT_TRADE_THAT);
+#endif
         return;
     }
 
@@ -339,6 +354,7 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recv_data)
 
     SendAuctionCommandResult(AH, AUCTION_STARTED, AUCTION_OK);
 
+    // Used by Eluna
 #ifdef ENABLE_ELUNA
     sEluna->OnAdd(auctionHouse, AH);
 #endif /* ENABLE_ELUNA */
@@ -492,6 +508,7 @@ void WorldSession::HandleAuctionRemoveItem(WorldPacket& recv_data)
     CharacterDatabase.CommitTransaction();
     sAuctionMgr.RemoveAItem(auction->itemGuidLow);
     auctionHouse->RemoveAuction(auction->Id);
+    // Used by Eluna
 #ifdef ENABLE_ELUNA
     sEluna->OnRemove(auctionHouse, auction);
 #endif /* ENABLE_ELUNA */
@@ -548,6 +565,9 @@ void WorldSession::HandleAuctionListBidderItems(WorldPacket& recv_data)
     auctionHouse->BuildListBidderItems(data, pl, count, totalcount);
     data.put<uint32>(0, count);                             // add count to placeholder
     data << uint32(totalcount);
+#if defined(TBC)
+    data << uint32(300);                                    // unk 2.3.0 delay for next isFull request?
+#endif
     SendPacket(&data);
 }
 
@@ -573,7 +593,12 @@ void WorldSession::HandleAuctionListOwnerItems(WorldPacket& recv_data)
     if (GetPlayer()->hasUnitState(UNIT_STAT_DIED))
         { GetPlayer()->RemoveSpellsCausingAura(SPELL_AURA_FEIGN_DEATH); }
 
+#if defined(CLASSIC)
     WorldPacket data(SMSG_AUCTION_OWNER_LIST_RESULT, (4 + 4));
+#endif
+#if defined(TBC)
+    WorldPacket data(SMSG_AUCTION_OWNER_LIST_RESULT, (4 + 4 + 4));
+#endif
     data << (uint32) 0;                                     // amount place holder
 
     uint32 count = 0;
@@ -582,6 +607,9 @@ void WorldSession::HandleAuctionListOwnerItems(WorldPacket& recv_data)
     auctionHouse->BuildListOwnerItems(data, _player, count, totalcount);
     data.put<uint32>(0, count);
     data << uint32(totalcount);
+#if defined(TBC)
+    data << uint32(300);                                    // 2.3.0 delay for next isFull request?
+#endif
     SendPacket(&data);
 }
 
@@ -592,7 +620,12 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
 
     ObjectGuid auctioneerGuid;
     std::string searchedname;
+#if defined(CLASSIC)
     uint8 levelmin, levelmax, usable;
+#endif
+#if defined(TBC)
+    uint8 levelmin, levelmax, usable, isFull, sortCount;
+#endif
     uint32 listfrom, auctionSlotID, auctionMainCategory, auctionSubCategory, quality;
 
     recv_data >> auctioneerGuid;
@@ -601,14 +634,50 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
 
     recv_data >> levelmin >> levelmax;
     recv_data >> auctionSlotID >> auctionMainCategory >> auctionSubCategory >> quality;
+#if defined(CLASSIC)
     recv_data >> usable;
+#endif
+#if defined(TBC)
+    recv_data >> usable >> isFull >> sortCount;
 
+    if (sortCount >= MAX_AUCTION_SORT)
+        return;
+
+    uint8 Sort[MAX_AUCTION_SORT];
+    memset(Sort, MAX_AUCTION_SORT, MAX_AUCTION_SORT);
+
+    // auction columns sorting
+    for (uint32 i = 0; i < sortCount; ++i)
+    {
+        uint8 column, reversed;
+        recv_data >> column;
+
+        if (column >= MAX_AUCTION_SORT)
+            return;
+
+        recv_data >> reversed;
+        Sort[i] = (reversed > 0) ? (column |= AUCTION_SORT_REVERSED) : column;
+    }
+#endif
     AuctionHouseEntry const* auctionHouseEntry = GetCheckedAuctionHouseForAuctioneer(auctioneerGuid);
     if (!auctionHouseEntry)
         { return; }
 
     // always return pointer
     AuctionHouseObject* auctionHouse = sAuctionMgr.GetAuctionsMap(auctionHouseEntry);
+
+#if defined(TBC)
+    // Sort
+    AuctionHouseObject::AuctionEntryMap const& aucs = auctionHouse->GetAuctions();
+    std::vector<AuctionEntry*> auctions;
+    auctions.reserve(aucs.size());
+
+    for (AuctionHouseObject::AuctionEntryMap::const_iterator itr = aucs.begin(); itr != aucs.end(); ++itr)
+        auctions.push_back(itr->second);
+
+    AuctionSorter sorter(Sort, GetPlayer());
+    std::sort(auctions.begin(), auctions.end(), sorter);
+#endif
 
     // remove fake death
     if (GetPlayer()->hasUnitState(UNIT_STAT_DIED))
@@ -617,7 +686,12 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
     // DEBUG_LOG("Auctionhouse search %s list from: %u, searchedname: %s, levelmin: %u, levelmax: %u, auctionSlotID: %u, auctionMainCategory: %u, auctionSubCategory: %u, quality: %u, usable: %u",
     //  auctioneerGuid.GetString().c_str(), listfrom, searchedname.c_str(), levelmin, levelmax, auctionSlotID, auctionMainCategory, auctionSubCategory, quality, usable);
 
+#if defined(CLASSIC)
     WorldPacket data(SMSG_AUCTION_LIST_RESULT, (4 + 4));
+#endif
+#if defined(TBC)
+    WorldPacket data(SMSG_AUCTION_LIST_RESULT, (4 + 4 + 4));
+#endif
     uint32 count = 0;
     uint32 totalcount = 0;
     data << uint32(0);
@@ -629,13 +703,22 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
 
     wstrToLower(wsearchedname);
 
+#if defined(CLASSIC)
     auctionHouse->BuildListAuctionItems(data, _player,
                                         wsearchedname, listfrom, levelmin, levelmax, usable,
                                         auctionSlotID, auctionMainCategory, auctionSubCategory, quality,
                                         count, totalcount);
+#endif
+#if defined(TBC)
+    BuildListAuctionItems(auctions, data, wsearchedname, listfrom, levelmin, levelmax, usable,
+                          auctionSlotID, auctionMainCategory, auctionSubCategory, quality, count, totalcount, isFull);
+#endif
 
     data.put<uint32>(0, count);
     data << uint32(totalcount);
+#if defined(TBC)
+    data << uint32(300);                                    // 2.3.0 delay for next isFull request?
+#endif
     SendPacket(&data);
 }
 

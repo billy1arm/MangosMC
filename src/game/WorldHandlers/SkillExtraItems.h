@@ -22,39 +22,15 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
-#ifndef MANGOSSERVER_CHANNELMGR_H
-#define MANGOSSERVER_CHANNELMGR_H
+#ifndef MANGOS_SKILL_EXTRA_ITEMS_H
+#define MANGOS_SKILL_EXTRA_ITEMS_H
 
 #include "Common.h"
-#include "Channel.h"
-#include "Policies/Singleton.h"
 
-#include <map>
-#include <string>
-
-class ChannelMgr
-{
-    public:
-        typedef std::map<std::wstring, Channel*> ChannelMap;
-        ChannelMgr() {}
-        ~ChannelMgr();
-
-#if defined(CLASSIC)
-        Channel* GetJoinChannel(const std::string &name);
-#endif
-#if defined(TBC)
-        Channel* GetJoinChannel(const std::string &name, uint32 channel_id);
-#endif
-        Channel* GetChannel(const std::string &name, Player* p, bool pkt = true);
-        void LeftChannel(const std::string &name);
-    private:
-        ChannelMap channels;
-        void MakeNotOnPacket(WorldPacket* data, const std::string &name);
-};
-
-class AllianceChannelMgr : public ChannelMgr {};
-class HordeChannelMgr    : public ChannelMgr {};
-
-ChannelMgr* channelMgr(Team team);
-
+// predef classes used in functions
+class Player;
+// returns true and sets the appropriate info if the player can create extra items with the given spellId
+bool canCreateExtraItems(Player* player, uint32 spellId, float& additionalChance, uint8& additionalMax);
+// function to load the extra item creation info from DB
+void LoadSkillExtraItemTable();
 #endif

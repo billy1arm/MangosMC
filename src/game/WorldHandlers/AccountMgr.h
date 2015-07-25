@@ -39,7 +39,12 @@ enum AccountOpResult
     AOR_DB_INTERNAL_ERROR
 };
 
+#if defined(CLASSIC)
 #define MAX_ACCOUNT_STR 16
+#endif
+#if defined(TBC)
+#define MAX_ACCOUNT_STR 32
+#endif
 
 class AccountMgr
 {
@@ -48,6 +53,9 @@ class AccountMgr
         ~AccountMgr();
 
         AccountOpResult CreateAccount(std::string username, std::string password);
+#if defined(TBC)
+        AccountOpResult CreateAccount(std::string username, std::string password, uint32 expansion);
+#endif
         AccountOpResult DeleteAccount(uint32 accid);
         AccountOpResult ChangeUsername(uint32 accid, std::string new_uname, std::string new_passwd);
         AccountOpResult ChangePassword(uint32 accid, std::string new_passwd);
