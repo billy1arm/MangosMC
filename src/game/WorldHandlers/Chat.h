@@ -118,13 +118,18 @@ class ChatHandler
         * \param ObjectGuid const& targetGuid  : Often null, but needed for type *MONSTER* or *BATTLENET or *BATTLEGROUND* or *ACHIEVEMENT
         * \param char const* targetName        : Often null, but needed for type *MONSTER* or *BATTLENET or *BATTLEGROUND*
         * \param char const* channelName       : Required only for CHAT_MSG_CHANNEL
-        * \param uint8 playerRank              : Used only for Defensive Channels (Value over 0 will show rank name before character name in channel)
+        * \param uint8 playerRank              : Used only for Defensive Channels (Value over 0 will show rank name before character name in channel) = Classic Only
         **/
         static void BuildChatPacket(
             WorldPacket& data, ChatMsg msgtype, char const* message, Language language = LANG_UNIVERSAL, ChatTagFlags chatTag = CHAT_TAG_NONE,
             ObjectGuid const& senderGuid = ObjectGuid(), char const* senderName = NULL,
             ObjectGuid const& targetGuid = ObjectGuid(), char const* targetName = NULL,
+#if defined (CLASSIC)
             char const* channelName = NULL, uint8 playerRank = 0);
+#endif
+#if defined (TBC)
+            char const* channelName = NULL);
+#endif
     protected:
         explicit ChatHandler() : m_session(NULL) {}      // for CLI subclass
 
@@ -206,8 +211,14 @@ class ChatHandler
         bool HandleCharacterLevelCommand(char* args);
         bool HandleCharacterRenameCommand(char* args);
         bool HandleCharacterReputationCommand(char* args);
+#if defined (TBC)
+        bool HandleCharacterTitlesCommand(char* args);
+#endif
 
         bool HandleDebugAnimCommand(char* args);
+#if defined (TBC)
+        bool HandleDebugArenaCommand(char* args);
+#endif
         bool HandleDebugBattlegroundCommand(char* args);
         bool HandleDebugGetItemStateCommand(char* args);
         bool HandleDebugGetItemValueCommand(char* args);
@@ -274,7 +285,9 @@ class ChatHandler
         bool HandleGuildRankCommand(char* args);
         bool HandleGuildDeleteCommand(char* args);
 
+#if defined (CLASSIC)
         bool HandleHonorShow(char* args);
+#endif
         bool HandleHonorAddCommand(char* args);
         bool HandleHonorAddKillCommand(char* args);
         bool HandleHonorUpdateCommand(char* args);
@@ -438,8 +451,14 @@ class ChatHandler
         bool HandleReloadLootTemplatesItemCommand(char* args);
         bool HandleReloadLootTemplatesMailCommand(char* args);
         bool HandleReloadLootTemplatesPickpocketingCommand(char* args);
+#if defined (TBC)
+        bool HandleReloadLootTemplatesProspectingCommand(char* args);
+#endif
         bool HandleReloadLootTemplatesReferenceCommand(char* args);
         bool HandleReloadLootTemplatesSkinningCommand(char* args);
+#if defined (TBC)
+        bool HandleReloadMailLevelRewardCommand(char* args);
+#endif
         bool HandleReloadMangosStringCommand(char* args);
         bool HandleReloadNpcGossipCommand(char* args);
         bool HandleReloadNpcTextCommand(char* args);
@@ -452,7 +471,13 @@ class ChatHandler
         bool HandleReloadReservedNameCommand(char* args);
         bool HandleReloadReputationRewardRateCommand(char* args);
         bool HandleReloadReputationSpilloverTemplateCommand(char* args);
+#if defined (CLASSIC)
         bool HandleReloadScriptBindingCommand(char* args);
+#endif
+#if defined (TBC)
+        bool HandleReloadSkillDiscoveryTemplateCommand(char* args);
+        bool HandleReloadSkillExtraItemTemplateCommand(char* args);
+#endif
         bool HandleReloadSkillFishingBaseLevelCommand(char* args);
         bool HandleReloadSpellAffectCommand(char* args);
         bool HandleReloadSpellAreaCommand(char* args);
@@ -467,7 +492,9 @@ class ChatHandler
         bool HandleReloadSpellThreatsCommand(char* args);
         bool HandleReloadSpellPetAurasCommand(char* args);
 
+#if defined (CLASSIC)
         bool HandleReloadSpellLinkedCommand(char* args);
+#endif
         bool HandleResetAchievementsCommand(char* args);
         bool HandleResetAllCommand(char* args);
         bool HandleResetHonorCommand(char* args);
@@ -505,6 +532,13 @@ class ChatHandler
         bool HandleTeleDelCommand(char* args);
         bool HandleTeleGroupCommand(char* args);
         bool HandleTeleNameCommand(char* args);
+
+#if defined (TBC)
+        bool HandleTitlesAddCommand(char* args);
+        bool HandleTitlesCurrentCommand(char* args);
+        bool HandleTitlesRemoveCommand(char* args);
+        bool HandleTitlesSetMaskCommand(char* args);
+#endif
 
         bool HandleTriggerActiveCommand(char* args);
         bool HandleTriggerNearCommand(char* args);
@@ -577,6 +611,9 @@ class ChatHandler
         bool HandleRespawnCommand(char* args);
         bool HandleComeToMeCommand(char* args);
         bool HandleCombatStopCommand(char* args);
+#if defined (TBC)
+        bool HandleFlushArenaPointsCommand(char* args);
+#endif
         bool HandleRepairitemsCommand(char* args);
         bool HandleStableCommand(char* args);
         bool HandleWaterwalkCommand(char* args);

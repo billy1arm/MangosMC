@@ -65,6 +65,7 @@
 // |color|Htalent:talent_id,rank|h[name]|h|r                              - client, talent icon shift-click rank==-1 if shift-copy unlearned talent
 // |color|Htaxinode:id|h[name]|h|r
 // |color|Htele:id|h[name]|h|r
+// |color|Htitle:id|h[name]|h|r
 
 bool ChatHandler::load_command_table = true;
 
@@ -189,6 +190,9 @@ ChatCommand* ChatHandler::getCommandTable()
         { "level",          SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleCharacterLevelCommand,      "", NULL },
         { "rename",         SEC_GAMEMASTER,     true,  &ChatHandler::HandleCharacterRenameCommand,     "", NULL },
         { "reputation",     SEC_GAMEMASTER,     true,  &ChatHandler::HandleCharacterReputationCommand, "", NULL },
+#if defined (TBC)
+        { "titles",         SEC_GAMEMASTER,     true,  &ChatHandler::HandleCharacterTitlesCommand,     "", NULL },
+#endif
         { NULL,             0,                  false, NULL,                                           "", NULL }
     };
 
@@ -217,6 +221,9 @@ ChatCommand* ChatHandler::getCommandTable()
     static ChatCommand debugCommandTable[] =
     {
         { "anim",           SEC_GAMEMASTER,     false, &ChatHandler::HandleDebugAnimCommand,                "", NULL },
+#if defined (TBC)
+        { "arena",          SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugArenaCommand,               "", NULL },
+#endif
         { "bg",             SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugBattlegroundCommand,        "", NULL },
         { "getitemstate",   SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugGetItemStateCommand,        "", NULL },
         { "lootrecipient",  SEC_GAMEMASTER,     false, &ChatHandler::HandleDebugGetLootRecipientCommand,    "", NULL },
@@ -297,7 +304,9 @@ ChatCommand* ChatHandler::getCommandTable()
     {
         { "add",            SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorAddCommand,            "", NULL },
         { "addkill",        SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorAddKillCommand,        "", NULL },
+#if defined (CLASSIC)
         { "show",           SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorShow,                  "", NULL },
+#endif
         { "update",         SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorUpdateCommand,         "", NULL },
         { NULL,             0,                  false, NULL,                                           "", NULL }
     };
@@ -369,6 +378,9 @@ ChatCommand* ChatHandler::getCommandTable()
         { "spell",          SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleLookupSpellCommand,         "", NULL },
         { "taxinode",       SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleLookupTaxiNodeCommand,      "", NULL },
         { "tele",           SEC_MODERATOR,      true,  &ChatHandler::HandleLookupTeleCommand,          "", NULL },
+#if defined (TBC)
+        { "title",          SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupTitleCommand,         "", NULL },
+#endif
         { NULL,             0,                  false, NULL,                                           "", NULL }
     };
 
@@ -395,12 +407,18 @@ ChatCommand* ChatHandler::getCommandTable()
         { "swim",           SEC_MODERATOR,      false, &ChatHandler::HandleModifySwimCommand,          "", NULL },
         { "scale",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyScaleCommand,         "", NULL },
         { "bwalk",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyBWalkCommand,         "", NULL },
+#if defined (TBC)
+        { "fly",            SEC_MODERATOR,      false, &ChatHandler::HandleModifyFlyCommand,           "", NULL },
+#endif
         { "aspeed",         SEC_MODERATOR,      false, &ChatHandler::HandleModifyASpeedCommand,        "", NULL },
         { "faction",        SEC_MODERATOR,      false, &ChatHandler::HandleModifyFactionCommand,       "", NULL },
         { "tp",             SEC_MODERATOR,      false, &ChatHandler::HandleModifyTalentCommand,        "", NULL },
         { "mount",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyMountCommand,         "", NULL },
         { "honor",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyHonorCommand,         "", NULL },
         { "rep",            SEC_GAMEMASTER,     false, &ChatHandler::HandleModifyRepCommand,           "", NULL },
+#if defined (TBC)
+        { "arena",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyArenaCommand,         "", NULL },
+#endif
         { "drunk",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyDrunkCommand,         "", NULL },
         { "standstate",     SEC_GAMEMASTER,     false, &ChatHandler::HandleModifyStandStateCommand,    "", NULL },
         { "morph",          SEC_GAMEMASTER,     false, &ChatHandler::HandleModifyMorphCommand,         "", NULL },
@@ -526,6 +544,9 @@ ChatCommand* ChatHandler::getCommandTable()
         { "locales_page_text",           SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesPageTextCommand,         "", NULL },
         { "locales_points_of_interest",  SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesPointsOfInterestCommand, "", NULL },
         { "locales_quest",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesQuestCommand,            "", NULL },
+#if defined (TBC)
+        { "mail_level_reward",           SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadMailLevelRewardCommand,         "", NULL },
+#endif
         { "mail_loot_template",          SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesMailCommand,       "", NULL },
         { "mangos_string",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadMangosStringCommand,            "", NULL },
         { "npc_gossip",                  SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadNpcGossipCommand,               "", NULL },
@@ -535,12 +556,21 @@ ChatCommand* ChatHandler::getCommandTable()
         { "page_text",                   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadPageTextsCommand,               "", NULL },
         { "pickpocketing_loot_template", SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesPickpocketingCommand, "", NULL},
         { "points_of_interest",          SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadPointsOfInterestCommand,        "", NULL },
+#if defined (TBC)
+        { "prospecting_loot_template",   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesProspectingCommand, "", NULL },
+#endif
         { "quest_template",              SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadQuestTemplateCommand,           "", NULL },
         { "reference_loot_template",     SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesReferenceCommand,  "", NULL },
         { "reserved_name",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadReservedNameCommand,            "", NULL },
         { "reputation_reward_rate",      SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadReputationRewardRateCommand,    "", NULL },
         { "reputation_spillover_template", SEC_ADMINISTRATOR, true, &ChatHandler::HandleReloadReputationSpilloverTemplateCommand, "", NULL },
+#if defined (CLASSIC)
         { "script_binding",              SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadScriptBindingCommand,           "", NULL },
+#endif
+#if defined (TBC)
+        { "skill_discovery_template",    SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadSkillDiscoveryTemplateCommand,  "", NULL },
+        { "skill_extra_item_template",   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadSkillExtraItemTemplateCommand,  "", NULL },
+#endif
         { "skill_fishing_base_level",    SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadSkillFishingBaseLevelCommand,   "", NULL },
         { "skinning_loot_template",      SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesSkinningCommand,   "", NULL },
         { "spell_affect",                SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadSpellAffectCommand,             "", NULL },
@@ -657,6 +687,17 @@ ChatCommand* ChatHandler::getCommandTable()
         { NULL,             0,                  false, NULL,                                           "", NULL }
     };
 
+#if defined (TBC)
+    static ChatCommand titlesCommandTable[] =
+    {
+        { "add",            SEC_GAMEMASTER,     false, &ChatHandler::HandleTitlesAddCommand,           "", NULL },
+        { "current",        SEC_GAMEMASTER,     false, &ChatHandler::HandleTitlesCurrentCommand,       "", NULL },
+        { "remove",         SEC_GAMEMASTER,     false, &ChatHandler::HandleTitlesRemoveCommand,        "", NULL },
+        { "setmask",        SEC_GAMEMASTER,     false, &ChatHandler::HandleTitlesSetMaskCommand,       "", NULL },
+        { NULL,             0,                  false, NULL,                                           "", NULL }
+    };
+#endif
+
     static ChatCommand triggerCommandTable[] =
     {
         { "active",         SEC_GAMEMASTER,     false, &ChatHandler::HandleTriggerActiveCommand,       "", NULL },
@@ -709,6 +750,9 @@ ChatCommand* ChatHandler::getCommandTable()
         { "reset",          SEC_ADMINISTRATOR,  true,  NULL,                                           "", resetCommandTable    },
         { "server",         SEC_PLAYER,         true,  NULL,                                           "", serverCommandTable   },
         { "tele",           SEC_MODERATOR,      true,  NULL,                                           "", teleCommandTable     },
+#if defined (TBC)
+        { "titles",         SEC_GAMEMASTER,     false, NULL,                                           "", titlesCommandTable   },
+#endif
         { "trigger",        SEC_GAMEMASTER,     false, NULL,                                           "", triggerCommandTable  },
         { "wp",             SEC_GAMEMASTER,     false, NULL,                                           "", wpCommandTable       },
 
@@ -766,12 +810,17 @@ ChatCommand* ChatHandler::getCommandTable()
         { "cometome",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleComeToMeCommand,            "", NULL },
         { "damage",         SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDamageCommand,              "", NULL },
         { "combatstop",     SEC_GAMEMASTER,     false, &ChatHandler::HandleCombatStopCommand,          "", NULL },
+#if defined (TBC)
+        { "flusharenapoints", SEC_ADMINISTRATOR, false, &ChatHandler::HandleFlushArenaPointsCommand,    "", NULL },
+#endif
         { "repairitems",    SEC_GAMEMASTER,     true,  &ChatHandler::HandleRepairitemsCommand,         "", NULL },
         { "stable",         SEC_ADMINISTRATOR,  false, &ChatHandler::HandleStableCommand,              "", NULL },
         { "waterwalk",      SEC_GAMEMASTER,     false, &ChatHandler::HandleWaterwalkCommand,           "", NULL },
         { "quit",           SEC_CONSOLE,        true,  &ChatHandler::HandleQuitCommand,                "", NULL },
         { "mmap",           SEC_GAMEMASTER,     false, NULL,                                           "", mmapCommandTable },
+#if defined (CLASSIC)
         { "spell_linked",   SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleReloadSpellLinkedCommand,   "", NULL },
+#endif
 #ifdef ENABLE_PLAYERBOTS
         { "bot",            SEC_PLAYER,         false, &ChatHandler::HandlePlayerbotCommand,           "", NULL },
         { "rndbot",         SEC_CONSOLE,        true,  &ChatHandler::HandlePlayerbotConsoleCommand,    "", NULL },
@@ -943,11 +992,18 @@ void ChatHandler::SendGlobalSysMessage(const char* str)
     // need copy to prevent corruption by strtok call in LineFromMessage original string
     char* buf = mangos_strdup(str);
     char* pos = buf;
-    ObjectGuid guid = m_session ? m_session->GetPlayer()->GetObjectGuid() : ObjectGuid();
+    ObjectGuid senderGuid = m_session ? m_session->GetPlayer()->GetObjectGuid() : ObjectGuid();
 
     while (char* line = LineFromMessage(pos))
     {
-        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line, LANG_UNIVERSAL, CHAT_TAG_NONE, guid);
+#if defined (TBC)
+        // m_session == null when we're accessing these command from the console.
+        ObjectGuid senderGuid;
+        if (m_session)
+            senderGuid = m_session->GetPlayer()->GetObjectGuid();
+        
+#endif
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line, LANG_UNIVERSAL, CHAT_TAG_NONE, senderGuid);
         sWorld.SendGlobalMessage(&data);
     }
 
@@ -1472,6 +1528,9 @@ bool ChatHandler::isValidChatMessage(const char* message)
     Quest const* linkedQuest = NULL;
     SpellEntry const* linkedSpell = NULL;
     ItemRandomPropertiesEntry const* itemProperty = NULL;
+#if defined (TBC)
+    ItemRandomSuffixEntry const* itemSuffix = NULL;
+#endif
 
     while (!reader.eof())
     {
@@ -1481,6 +1540,9 @@ bool ChatHandler::isValidChatMessage(const char* message)
             linkedQuest = NULL;
             linkedSpell = NULL;
             itemProperty = NULL;
+#if defined (TBC)
+            itemSuffix = NULL;
+#endif
 
             reader.ignore(255, '|');
         }
@@ -1619,6 +1681,14 @@ bool ChatHandler::isValidChatMessage(const char* message)
                         if (!itemProperty)
                             { return false; }
                     }
+#if defined (TBC)
+                    else if (propertyId < 0)
+                    {
+                        itemSuffix = sItemRandomSuffixStore.LookupEntry(-propertyId);
+                        if (!itemSuffix)
+                            return false;
+                    }
+#endif
 
                     // ignore other integers
                     while ((c >= '0' && c <= '9') || c == ':')
@@ -1844,8 +1914,17 @@ bool ChatHandler::isValidChatMessage(const char* message)
                     }
                     else if (linkedItem)
                     {
+#if defined (TBC)
+                        char* const* suffix = itemSuffix ? itemSuffix->nameSuffix : (itemProperty ? itemProperty->nameSuffix : NULL);
+#endif
                         std::string expectedName = std::string(linkedItem->Name1);
-
+#if defined (TBC)
+                        if (suffix)
+                        {
+                            expectedName += " ";
+                            expectedName += suffix[LOCALE_enUS];
+                        }
+#endif
                         if (expectedName != buffer)
                         {
                             ItemLocale const* il = sObjectMgr.GetItemLocale(linkedItem->ItemId);
@@ -1859,7 +1938,13 @@ bool ChatHandler::isValidChatMessage(const char* message)
                                     { expectedName = linkedItem->Name1; }
                                 else
                                     { expectedName = il->Name[dbIndex]; }
-
+#if defined (TBC)
+                                if (suffix)
+                                {
+                                    expectedName += " ";
+                                    expectedName += suffix[i];
+                                }
+#endif
                                 if (expectedName == buffer)
                                 {
                                     foundName = true;
@@ -3144,6 +3229,10 @@ static RaceMaskName const raceMaskNames[] =
     { "tauren", (1 << (RACE_TAUREN - 1))  },
     { "gnome", (1 << (RACE_GNOME - 1))   },
     { "troll", (1 << (RACE_TROLL - 1))   },
+#if defined (TBC)
+    { "bloodelf", (1 << (RACE_BLOODELF - 1))},
+    { "draenei", (1 << (RACE_DRAENEI - 1)) },
+#endif
 
     // masks
     { "alliance", RACEMASK_ALLIANCE },
@@ -3344,58 +3433,127 @@ void ChatHandler::LogCommand(char const* fullcmd)
 void ChatHandler::BuildChatPacket(WorldPacket& data, ChatMsg msgtype, char const* message, Language language /*= LANG_UNIVERSAL*/, ChatTagFlags chatTag /*= CHAT_TAG_NONE*/,
                                   ObjectGuid const& senderGuid /*= ObjectGuid()*/, char const* senderName /*= NULL*/,
                                   ObjectGuid const& targetGuid /*= ObjectGuid()*/, char const* targetName /*= NULL*/,
+#if defined (CLASSIC)
                                   char const* channelName /*= NULL*/, uint8 playerRank /*= 0*/)
+#endif
+#if defined (TBC)
+                                  char const* channelName /*= NULL*/)
+#endif
 {
+#if defined (CLASSIC)
     data.Initialize(SMSG_MESSAGECHAT);
+#endif
+#if defined (TBC)
+    bool isGM = chatTag & CHAT_TAG_GM;
+
+    data.Initialize(isGM ? SMSG_GM_MESSAGECHAT : SMSG_MESSAGECHAT);
+#endif
     data << uint8(msgtype);
     data << uint32(language);
+#if defined (TBC)
+    data << ObjectGuid(senderGuid);
+    data << uint32(0);                                              // 2.1.0
+#endif
 
     switch (msgtype)
     {
-        case CHAT_MSG_MONSTER_WHISPER:
-        case CHAT_MSG_RAID_BOSS_WHISPER:
-        case CHAT_MSG_RAID_BOSS_EMOTE:
-        case CHAT_MSG_MONSTER_EMOTE:
-            MANGOS_ASSERT(senderName);
-            data << uint32(strlen(senderName) + 1);
-            data << senderName;
-            data << ObjectGuid(targetGuid);                         // Unit Target
-            break;
-    
-        case CHAT_MSG_SAY:
-        case CHAT_MSG_PARTY:
-        case CHAT_MSG_YELL:
-            data << ObjectGuid(senderGuid);
-            data << ObjectGuid(senderGuid);
-            break;
-    
-        case CHAT_MSG_MONSTER_SAY:
-        case CHAT_MSG_MONSTER_YELL:
-            MANGOS_ASSERT(senderName);
-            data << ObjectGuid(senderGuid);
-            data << uint32(strlen(senderName) + 1);
-            data << senderName;
-            data << ObjectGuid(targetGuid);                         // Unit Target
-            break;
-    
-        case CHAT_MSG_CHANNEL:
-            MANGOS_ASSERT(channelName);
-            data << channelName;
-            data << uint32(playerRank);
-            data << ObjectGuid(senderGuid);
-            break;
-    
-        default:
-            data << ObjectGuid(senderGuid);
-            break;
+#if defined (TBC)
+    case CHAT_MSG_MONSTER_SAY:
+    case CHAT_MSG_MONSTER_PARTY:
+    case CHAT_MSG_MONSTER_YELL:
+#endif
+    case CHAT_MSG_MONSTER_WHISPER:
+    case CHAT_MSG_RAID_BOSS_WHISPER:
+    case CHAT_MSG_RAID_BOSS_EMOTE:
+    case CHAT_MSG_MONSTER_EMOTE:
+        MANGOS_ASSERT(senderName);
+        data << uint32(strlen(senderName) + 1);
+        data << senderName;
+        data << ObjectGuid(targetGuid);                         // Unit Target
+#if defined (CLASSIC)
+        break;
+
+    case CHAT_MSG_SAY:
+    case CHAT_MSG_PARTY:
+    case CHAT_MSG_YELL:
+        data << ObjectGuid(senderGuid);
+        data << ObjectGuid(senderGuid);
+        break;
+
+    case CHAT_MSG_MONSTER_SAY:
+    case CHAT_MSG_MONSTER_YELL:
+        MANGOS_ASSERT(senderName);
+        data << ObjectGuid(senderGuid);
+        data << uint32(strlen(senderName) + 1);
+        data << senderName;
+        data << ObjectGuid(targetGuid);                         // Unit Target
+        break;
+
+    case CHAT_MSG_CHANNEL:
+        MANGOS_ASSERT(channelName);
+        data << channelName;
+        data << uint32(playerRank);
+        data << ObjectGuid(senderGuid);
+        break;
+
+    default:
+        data << ObjectGuid(senderGuid);
+        break;
     }
 
     MANGOS_ASSERT(message);
     data << uint32(strlen(message) + 1);
     data << message;
     data << uint8(chatTag);
+#endif
+#if defined (TBC)
+    if (targetGuid && !targetGuid.IsPlayer() && !targetGuid.IsPet())
+    {
+        data << uint32(strlen(targetName) + 1);             // target name length
+        data << targetName;                                 // target name
+    }
+    MANGOS_ASSERT(message);
+    data << uint32(strlen(message) + 1);
+    data << message;
+    data << uint8(chatTag);
+    break;
+        case CHAT_MSG_BG_SYSTEM_NEUTRAL:
+        case CHAT_MSG_BG_SYSTEM_ALLIANCE:
+        case CHAT_MSG_BG_SYSTEM_HORDE:
+            data << ObjectGuid(targetGuid);                         // Unit Target
+            if (targetGuid && !targetGuid.IsPlayer())
+            {
+                MANGOS_ASSERT(targetName);
+                data << uint32(strlen(targetName) + 1);             // target name length
+                data << targetName;                                 // target name
+            }
+            MANGOS_ASSERT(message);
+            data << uint32(strlen(message) + 1);
+            data << message;
+            data << uint8(chatTag);
+            break;
+        default:
+            if (msgtype == CHAT_MSG_CHANNEL)
+            {
+                MANGOS_ASSERT(channelName);
+                data << channelName;
+            }
+            data << ObjectGuid(targetGuid);
+            MANGOS_ASSERT(message);
+            data << uint32(strlen(message) + 1);
+            data << message;
+            data << uint8(chatTag);
+            if (isGM)
+            {
+                MANGOS_ASSERT(senderName);
+                data << uint32(strlen(senderName) + 1);
+                data << senderName;
+            }
+            break;
+        }
+    }
+#endif
 }
-
 // Instantiate template for helper function
 template void ChatHandler::ShowNpcOrGoSpawnInformation<Creature>(uint32 guid);
 template void ChatHandler::ShowNpcOrGoSpawnInformation<GameObject>(uint32 guid);

@@ -96,8 +96,26 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
     }
     if (langDesc->skill_id != 0 && !_player->HasSkill(langDesc->skill_id))
     {
-        SendNotification(LANG_NOT_LEARNED_LANGUAGE);
-        return;
+#if defined (TBC)
+        // also check SPELL_AURA_COMPREHEND_LANGUAGE (client offers option to speak in that language)
+        Unit::AuraList const& langAuras = _player->GetAurasByType(SPELL_AURA_COMPREHEND_LANGUAGE);
+        bool foundAura = false;
+        for (Unit::AuraList::const_iterator i = langAuras.begin(); i != langAuras.end(); ++i)
+        {
+            if ((*i)->GetModifier()->m_miscvalue == int32(lang))
+            {
+                foundAura = true;
+                break;
+            }
+        }
+        if (!foundAura)
+        {
+#endif
+            SendNotification(LANG_NOT_LEARNED_LANGUAGE);
+            return;
+#if defined (TBC)
+        }
+#endif
     }
 
     if (lang == LANG_ADDON)
@@ -253,7 +271,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             }
             else
 #endif
-                GetPlayer()->Whisper(msg, lang, player->GetObjectGuid());
+            GetPlayer()->Whisper(msg, lang, player->GetObjectGuid());
         } break;
 
         case CHAT_MSG_PARTY:
@@ -796,10 +814,15 @@ void WorldSession::HandleTextEmoteOpcode(WorldPacket& recv_data)
 void WorldSession::HandleChatIgnoredOpcode(WorldPacket& recv_data)
 {
     ObjectGuid iguid;
+#if defined (TBC)
+    uint8 unk;
+#endif
     // DEBUG_LOG("WORLD: Received opcode CMSG_CHAT_IGNORED");
 
     recv_data >> iguid;
-
+#if defined (TBC)
+    recv_data >> unk;                                       // probably related to spam reporting
+#endif
     Player* player = sObjectMgr.GetPlayer(iguid);
     if (!player || !player->GetSession())
         { return; }
@@ -822,8 +845,18 @@ void WorldSession::SendWrongFactionNotice()
     SendPacket(&data);
 }
 
+#if defined (CLASSIC)
 void WorldSession::SendChatRestrictedNotice()
 {
     WorldPacket data(SMSG_CHAT_RESTRICTED, 0);
     SendPacket(&data);
 }
+#endif
+#if defined (TBC)
+void WorldSession::SendChatRestrictedNotice(ChatRestrictionType restriction)
+{
+    WorldPacket data(SMSG_CHAT_RESTRICTED, 1);
+    data << uint8(restriction);
+    SendPacket(&data);
+}
+#endif
