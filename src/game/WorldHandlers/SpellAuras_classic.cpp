@@ -628,6 +628,10 @@ bool Aura::isAffectedOnSpell(SpellEntry const* spell) const
 
 bool Aura::CanProcFrom(SpellEntry const* spell, uint32 EventProcEx, uint32 procEx, bool active, bool useClassMask) const
 {
+    // Aura cannot proc from itself unless it's periodic
+    if (GetId() == spell->Id && !IsPeriodic())
+      { return false; }
+
     // Check EffectClassMask (in pre-3.x stored in spell_affect in fact)
     ClassFamilyMask mask = sSpellMgr.GetSpellAffectMask(GetId(), GetEffIndex());
 
@@ -2238,6 +2242,7 @@ void Aura::HandleModCharm(bool apply, bool Real)
         target->CombatStop(true);
         target->DeleteThreatList();
         target->GetHostileRefManager().deleteReferences();
+        target->GetMotionMaster()->MovementExpired(true);
 
         if (target->GetTypeId() == TYPEID_UNIT)
         {
@@ -2269,6 +2274,8 @@ void Aura::HandleModCharm(bool apply, bool Real)
                 }
             }
         }
+        else if (Player *plTarget = target->ToPlayer())
+            plTarget->SetClientControl(plTarget, 0);
 
         if (caster->GetTypeId() == TYPEID_PLAYER)
             { ((Player*)caster)->CharmSpellInitialize(); }
@@ -2277,8 +2284,11 @@ void Aura::HandleModCharm(bool apply, bool Real)
     {
         target->SetCharmerGuid(ObjectGuid());
 
-        if (target->GetTypeId() == TYPEID_PLAYER)
-            { ((Player*)target)->setFactionForRace(target->getRace()); }
+        if (Player *plTarget = target->ToPlayer())
+        {
+            plTarget->SetClientControl(plTarget, 1);
+            plTarget->setFactionForRace(target->getRace());
+        }
         else
         {
             CreatureInfo const* cinfo = ((Creature*)target)->GetCreatureInfo();
@@ -2315,6 +2325,7 @@ void Aura::HandleModCharm(bool apply, bool Real)
         target->CombatStop(true);
         target->DeleteThreatList();
         target->GetHostileRefManager().deleteReferences();
+        target->GetMotionMaster()->MovementExpired(true);
 
         if (target->GetTypeId() == TYPEID_UNIT)
         {
@@ -2470,6 +2481,16 @@ void Aura::HandleAuraModStun(bool apply, bool Real)
 
             caster->CastSpell(target, spellInfo, true, NULL, this);
             return;
+        }
+    }
+    // special rule for allowing Improved Sap
+    if (GetSpellProto()->IsFitToFamily(SPELLFAMILY_ROGUE, UI64LIT(0x80)))
+    {
+        target->SetInDummyCombatState(apply);
+        if (!apply)
+        {
+            target->GetThreatManager().setDirty(true);
+            GetCaster()->GetThreatManager().setDirty(true);
         }
     }
 }
@@ -2974,15 +2995,23 @@ void Aura::HandleAuraProcTriggerSpell(bool apply, bool Real)
 
     Unit* target = GetTarget();
 
-    switch (GetId())
+    if (apply)
     {
+        switch (GetId())
+        {
             // some spell have charges by functionality not have its in spell data
-        case 28200:                                         // Ascendance (Talisman of Ascendance trinket)
-            if (apply)
-                { GetHolder()->SetAuraCharges(6); }
-            break;
-        default:
-            break;
+            case 28200:                                    // Ascendance (Talisman of Ascendance trinket)
+                GetHolder()->SetAuraCharges(6);
+                break;
+            case 8179:                                     // Grounding Totem
+                target->CastSpell(target, 8178, true, 0, this);
+                return;
+            case 6474:                                     // Earthbind Totem
+                target->CastSpell(target, 3600, true, 0, this);
+                return;
+            default:
+                break;
+        }
     }
 }
 
@@ -4049,6 +4078,8 @@ void Aura::HandleShapeshiftBoosts(bool apply)
         case FORM_CREATURECAT:
         case FORM_CREATUREBEAR:
             break;
+        default:
+            break;
     }
 
     if (apply)
@@ -4105,7 +4136,7 @@ void Aura::HandleShapeshiftBoosts(bool apply)
         Unit::SpellAuraHolderMap& tAuras = target->GetSpellAuraHolderMap();
         for (Unit::SpellAuraHolderMap::iterator itr = tAuras.begin(); itr != tAuras.end();)
         {
-            if (itr->second->IsRemovedOnShapeLost() || itr->second->GetSpellProto()->Id == 24864)   // Feline Swiftness Passive 2a
+            if ((itr->second->IsRemovedOnShapeLost() && itr->second->GetSpellProto()->Id != 12292) || itr->second->GetSpellProto()->Id == 24864)   // Feline Swiftness Passive 2a drop, Sweeping Strikes keep TODO
             {
                 target->RemoveAurasDueToSpell(itr->second->GetId());
                 itr = tAuras.begin();
@@ -4222,7 +4253,13 @@ void Aura::HandleSpiritOfRedemption(bool apply, bool Real)
                 { target->SetStandState(UNIT_STAND_STATE_STAND); }
         }
 
-        target->SetHealth(1);
+        // interrupt casting when entering Spirit of Redemption  
+        if (target->IsNonMeleeSpellCasted(false))  
+            { target->InterruptNonMeleeSpells(false); }
+   
+        // set health and mana to maximum  
+        target->SetHealth(target->GetMaxHealth());  
+        target->SetPower(POWER_MANA, target->GetMaxPower(POWER_MANA));  
     }
     // die at aura end
     else
@@ -4265,7 +4302,7 @@ void Aura::HandleSchoolAbsorb(bool apply, bool Real)
                     break;
                 case SPELLFAMILY_WARLOCK:
                     // Shadow Ward
-                    if (spellProto->SpellFamilyFlags == UI64LIT(0x00))
+                    if (!spellProto->SpellFamilyFlags)
                         //+10% from +spell bonus
                         { DoneActualBenefit = caster->SpellBaseDamageBonusDone(GetSpellSchoolMask(spellProto)) * 0.1f; }
                     break;
@@ -4726,11 +4763,6 @@ void Aura::PeriodicTick()
                 // eating anim
                 target->HandleEmoteCommand(EMOTE_ONESHOT_EAT);
             }
-            else if (GetId() == 20577)
-            {
-                // cannibalize anim
-                target->HandleEmoteCommand(EMOTE_STATE_CANNIBALIZE);
-            }
 
             // Anger Management
             // amount = 1+ 16 = 17 = 3,4*5 = 10,2*5/3
@@ -4871,13 +4903,6 @@ void Aura::HandleInterruptRegen(bool apply, bool Real)
     GetTarget()->SetInDummyCombatState(apply);
 }
 
-// NOTE this may be moved to the header file, but no need because it is used locally
-#define HEARTBEAT_AURA_MECHANIC_MASK ( \
-    (1 << (MECHANIC_CHARM - 1)) | (1 << (MECHANIC_BANISH - 1)) | (1 << (MECHANIC_DISORIENTED - 1)) | \
-    (1 << (MECHANIC_POLYMORPH - 1)) | (1 << (MECHANIC_HORROR - 1)) | (1 << (MECHANIC_FEAR - 1)) | \
-    (1 << (MECHANIC_SLEEP - 1)) | (1 << (MECHANIC_SAPPED - 1)) | (1 << (MECHANIC_FREEZE - 1)) | \
-    (1 << (MECHANIC_ROOT - 1)) | (1 << (MECHANIC_STUN - 1)) | (1 << (MECHANIC_KNOCKOUT - 1)))
-
 SpellAuraHolder::SpellAuraHolder(SpellEntry const* spellproto, Unit* target, WorldObject* caster, Item* castItem) :
     m_spellProto(spellproto),
     m_target(target), m_castItemGuid(castItem ? castItem->GetObjectGuid() : ObjectGuid()),
@@ -4934,11 +4959,8 @@ SpellAuraHolder::SpellAuraHolder(SpellEntry const* spellproto, Unit* target, Wor
             break;
     }
 
-    //m_isHeartbeatSubject = (GetSpellMechanicMask(m_spellProto, (1 << MAX_EFFECT_INDEX) - 1) & HEARTBEAT_AURA_MECHANIC_MASK) && caster != target
-    //    && caster->GetTypeId() == TYPEID_PLAYER && target->GetTypeId() == TYPEID_PLAYER && !IsChanneledSpell(m_spellProto);
-
-    //TODO consider removing the m_isHeartbeatSubject variable due to simplified condition check
-    m_isHeartbeatSubject = bool(m_spellProto->Attributes & SPELL_ATTR_HEARTBEAT_RESIST_CHECK);
+    m_isHeartbeatSubject = (m_spellProto->Attributes & SPELL_ATTR_HEARTBEAT_RESIST_CHECK) && caster != target
+        && caster->GetTypeId() == TYPEID_PLAYER && target->GetTypeId() == TYPEID_PLAYER && !IsChanneledSpell(m_spellProto);
 
     for (int32 i = 0; i < MAX_EFFECT_INDEX; ++i)
         { m_auras[i] = NULL; }

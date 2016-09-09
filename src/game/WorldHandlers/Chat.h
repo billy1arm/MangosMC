@@ -147,7 +147,7 @@ class ChatHandler
         bool HasLowerSecurity(Player* target, ObjectGuid guid = ObjectGuid(), bool strong = false);
         bool HasLowerSecurityAccount(WorldSession* target, uint32 account, bool strong = false);
 
-        void SendGlobalSysMessage(const char* str);
+        void SendGlobalSysMessage(const char* str, AccountTypes minSec = SEC_PLAYER);
 
         bool SetDataForCommandInTable(ChatCommand* table, const char* text, uint32 security, std::string const& help);
         void ExecuteCommand(const char* text);
@@ -254,10 +254,13 @@ class ChatHandler
         bool HandleEventInfoCommand(char* args);
 
         bool HandleGameObjectAddCommand(char* args);
+        bool HandleGameObjectAnimationCommand(char* args);
         bool HandleGameObjectDeleteCommand(char* args);
+        bool HandleGameObjectLootstateCommand(char* args);
         bool HandleGameObjectMoveCommand(char* args);
         bool HandleGameObjectNearCommand(char* args);
         bool HandleGameObjectPhaseCommand(char* args);
+        bool HandleGameObjectStateCommand(char* args);
         bool HandleGameObjectTargetCommand(char* args);
         bool HandleGameObjectTurnCommand(char* args);
 
@@ -491,6 +494,7 @@ class ChatHandler
         bool HandleReloadSpellTargetPositionCommand(char* args);
         bool HandleReloadSpellThreatsCommand(char* args);
         bool HandleReloadSpellPetAurasCommand(char* args);
+        bool HandleReloadDisablesCommand(char* args);
 
 #if defined (CLASSIC)
         bool HandleReloadSpellLinkedCommand(char* args);
@@ -604,8 +608,17 @@ class ChatHandler
         bool HandleChangeWeatherCommand(char* args);
         bool HandleKickPlayerCommand(char* args);
 
-        bool HandleTicketCommand(char* args);
-        bool HandleDelTicketCommand(char* args);
+        bool HandleTicketAcceptCommand(char* args);
+        bool HandleTicketCloseCommand(char* args);
+        bool HandleTicketDeleteCommand(char* args);
+        bool HandleTicketInfoCommand(char* args);
+        bool HandleTicketListCommand(char* args);
+        bool HandleTicketMeAcceptCommand(char* args);
+        bool HandleTicketOnlineListCommand(char* args);
+        bool HandleTicketRespondCommand(char* args);
+        bool HandleTicketShowCommand(char* args);
+        bool HandleTickerSurveyClose(char* args);
+
         bool HandleMaxSkillCommand(char* args);
         bool HandleSetSkillCommand(char* args);
         bool HandleRespawnCommand(char* args);

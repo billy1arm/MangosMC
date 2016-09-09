@@ -136,6 +136,7 @@ enum eConfigUInt32Values
     CONFIG_UINT32_GM_LOGIN_STATE,
     CONFIG_UINT32_GM_VISIBLE_STATE,
     CONFIG_UINT32_GM_ACCEPT_TICKETS,
+    CONFIG_UINT32_GM_TICKET_LIST_SIZE,
     CONFIG_UINT32_GM_CHAT,
     CONFIG_UINT32_GM_WISPERING_TO,
     CONFIG_UINT32_GM_LEVEL_IN_GM_LIST,
@@ -383,6 +384,7 @@ enum eConfigBoolValues
     CONFIG_BOOL_DEATH_BONES_BG_OR_ARENA,
 #endif
     CONFIG_BOOL_ALL_TAXI_PATHS,
+    CONFIG_BOOL_INSTANT_TAXI,
 #if defined(TBC)
     CONFIG_BOOL_DECLINED_NAMES_USED,
 #endif
@@ -431,6 +433,7 @@ enum eConfigBoolValues
 #endif
     CONFIG_BOOL_WARDEN_WIN_ENABLED,
     CONFIG_BOOL_WARDEN_OSX_ENABLED,
+    CONFIG_BOOL_GM_TICKET_OFFLINE_CLOSING,
     CONFIG_BOOL_VALUE_COUNT
 };
 
@@ -601,7 +604,7 @@ class World
 
 #if defined(CLASSIC)
         tm* GetLocalTimeByTime(time_t now) const { return localtime(&now); }
-        uint32 GetDateByLocalTime(tm* now) const { return ((uint32)(now->tm_year << 16) | (uint32)(now->tm_yday)); }
+        uint32 GetDateByLocalTime(tm* now) const { return uint32(now->tm_year*365 + (now->tm_year-1)/4 + now->tm_yday); }
         uint32 GetDateToday() const {   return GetDateByLocalTime(GetLocalTimeByTime(m_gameTime)); }
         uint32 GetDateThisWeekBegin() const {   return GetDateToday() - GetLocalTimeByTime(m_gameTime)->tm_wday; }
         uint32 GetDateLastMaintenanceDay() const
@@ -625,7 +628,7 @@ class World
         void LoadConfigSettings(bool reload = false);
 
         void SendWorldText(int32 string_id, ...);
-        void SendGlobalMessage(WorldPacket* packet);
+        void SendGlobalMessage(WorldPacket* packet, AccountTypes minSec = SEC_PLAYER);
         void SendServerMessage(ServerMessageType type, const char* text = "", Player* player = NULL);
         void SendZoneUnderAttackMessage(uint32 zoneId, Team team);
         void SendDefenseMessage(uint32 zoneId, int32 textId);

@@ -47,6 +47,7 @@ struct GridMapFileHeader
 {
     uint32 mapMagic;
     uint32 versionMagic;
+    uint32 buildMagic;
     uint32 areaMapOffset;
     uint32 areaMapSize;
     uint32 heightMapOffset;
@@ -233,6 +234,7 @@ class TerrainInfo : public Referencable<AtomicLong>
         float GetWaterLevel(float x, float y, float z, float* pGround = NULL) const;
         float GetWaterOrGroundLevel(float x, float y, float z, float* pGround = NULL, bool swim = false) const;
         bool IsInWater(float x, float y, float z, GridMapLiquidData* data = 0) const;
+        bool IsSwimmable(float x, float y, float pZ, float radius = 1.5f, GridMapLiquidData* data = 0) const;
         bool IsUnderWater(float x, float y, float z) const;
 
         GridMapLiquidStatus getLiquidStatus(float x, float y, float z, uint8 ReqLiquidType, GridMapLiquidData* data = 0) const;
@@ -279,13 +281,13 @@ class TerrainInfo : public Referencable<AtomicLong>
         ShortIntervalTimer i_timer;
 
         typedef ACE_Thread_Mutex LOCK_TYPE;
-        typedef ACE_Guard<LOCK_TYPE> LOCK_GUARD;
         LOCK_TYPE m_mutex;
+        char _cache_guard[1024];
         LOCK_TYPE m_refMutex;
 };
 
 // class for managing TerrainData object and all sort of geometry querying operations
-class TerrainManager : public MaNGOS::Singleton<TerrainManager>, MaNGOS::ClassLevelLockable<TerrainManager, ACE_Thread_Mutex>
+class TerrainManager : public MaNGOS::Singleton<TerrainManager, MaNGOS::ClassLevelLockable<TerrainManager, ACE_Thread_Mutex> >
 {
         typedef UNORDERED_MAP<uint32,  TerrainInfo*> TerrainDataMap;
         friend class MaNGOS::OperatorNew<TerrainManager>;
@@ -326,7 +328,8 @@ class TerrainManager : public MaNGOS::Singleton<TerrainManager>, MaNGOS::ClassLe
         TerrainManager(const TerrainManager&);
         TerrainManager& operator=(const TerrainManager&);
 
-        typedef MaNGOS::ClassLevelLockable<TerrainManager, ACE_Thread_Mutex>::Lock Guard;
+        typedef ACE_Thread_Mutex LOCK_TYPE;
+        LOCK_TYPE m_mutex;
         TerrainDataMap i_TerrainMap;
 };
 

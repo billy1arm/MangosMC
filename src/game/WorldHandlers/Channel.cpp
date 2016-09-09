@@ -70,6 +70,7 @@ Channel::Channel(const std::string& name, uint32 channel_id)
     else                                                    // it's custom channel
     {
         m_flags |= CHANNEL_FLAG_CUSTOM;
+        m_announce = (name.compare("world") != 0);
     }
 }
 
@@ -1011,7 +1012,7 @@ void Channel::MakeVoiceOff(WorldPacket* data, ObjectGuid guid)
 }
 #endif
 
-void Channel::JoinNotify(ObjectGuid guid)
+void Channel::JoinNotify(ObjectGuid /*guid*/)
 {
 #if defined(TBC)
     WorldPacket data;
@@ -1030,7 +1031,7 @@ void Channel::JoinNotify(ObjectGuid guid)
 #endif
 }
 
-void Channel::LeaveNotify(ObjectGuid guid)
+void Channel::LeaveNotify(ObjectGuid /*guid*/)
 {
 #if defined(TBC)
     WorldPacket data(SMSG_USERLIST_REMOVE, 8 + 1 + 4 + GetName().size() + 1);

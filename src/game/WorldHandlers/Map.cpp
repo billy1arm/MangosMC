@@ -62,6 +62,11 @@ Map::~Map()
     if (m_persistentState)
         { m_persistentState->SetUsedByMapState(NULL); }         // field pointer can be deleted after this
 
+#ifdef ENABLE_ELUNA
+    if (Instanceable())
+        sEluna->FreeInstanceId(GetInstanceId());
+#endif /* ENABLE_ELUNA */
+
     delete i_data;
     i_data = NULL;
 
@@ -368,7 +373,9 @@ Map::Add(T* obj)
     DEBUG_LOG("%s enters grid[%u,%u]", obj->GetGuidStr().c_str(), cell.GridX(), cell.GridY());
 
     obj->GetViewPoint().Event_AddedToWorld(&(*grid)(cell.CellX(), cell.CellY()));
+    obj->SetAsNewObject(true);
     UpdateObjectVisibility(obj, cell, p);
+    obj->SetAsNewObject(false);
 }
 
 void Map::MessageBroadcast(Player const* player, WorldPacket* msg, bool to_self)
@@ -462,6 +469,36 @@ bool Map::loaded(const GridPair& p) const
     return (getNGrid(p.x_coord, p.y_coord) && isGridObjectDataLoaded(p.x_coord, p.y_coord));
 }
 
+void Map::VisitNearbyCellsOf(WorldObject* obj,
+                             TypeContainerVisitor<MaNGOS::ObjectUpdater, GridTypeMapContainer> &gridVisitor,
+                             TypeContainerVisitor<MaNGOS::ObjectUpdater, WorldTypeMapContainer> &worldVisitor)
+{
+    if (!obj->IsPositionValid())
+      return;
+
+    // lets update mobs/objects in ALL visible cells around player!
+    CellArea area = Cell::CalculateCellArea(obj->GetPositionX(), obj->GetPositionY(), GetVisibilityDistance());
+
+    for (uint32 x = area.low_bound.x_coord; x <= area.high_bound.x_coord; ++x)
+    {
+        for (uint32 y = area.low_bound.y_coord; y <= area.high_bound.y_coord; ++y)
+        {
+            // marked cells are those that have been visited
+            // don't visit the same cell twice
+            uint32 cell_id = (y * TOTAL_NUMBER_OF_CELLS_PER_MAP) + x;
+            if (!isCellMarked(cell_id))
+            {
+                markCell(cell_id);
+                CellPair pair(x, y);
+                Cell cell(pair);
+                cell.SetNoCreate();
+                Visit(cell, gridVisitor);
+                Visit(cell, worldVisitor);
+            }
+        }
+    }
+}
+
 void Map::Update(const uint32& t_diff)
 {
     m_dyn_tree.update(t_diff);
@@ -505,28 +542,37 @@ void Map::Update(const uint32& t_diff)
     {
         Player* plr = m_mapRefIter->getSource();
 
-        if (!plr->IsInWorld() || !plr->IsPositionValid())
+        if (!plr || !plr->IsInWorld())
             { continue; }
 
-        // lets update mobs/objects in ALL visible cells around player!
-        CellArea area = Cell::CalculateCellArea(plr->GetPositionX(), plr->GetPositionY(), GetVisibilityDistance());
+        VisitNearbyCellsOf(plr, grid_object_update, world_object_update);
 
-        for (uint32 x = area.low_bound.x_coord; x <= area.high_bound.x_coord; ++x)
+        // Collect and remove references to creatures too far away from player's m_HostileRefManager
+        // Combat state will change on next tick, if case
+        if (!IsDungeon() && plr->IsInCombat())
         {
-            for (uint32 y = area.low_bound.y_coord; y <= area.high_bound.y_coord; ++y)
+            std::vector<Creature*> _removeList;
+            HostileRefManager& href = plr->GetHostileRefManager();
+            HostileReference* ref = href.getFirst();
+
+            while (ref)
             {
-                // marked cells are those that have been visited
-                // don't visit the same cell twice
-                uint32 cell_id = (y * TOTAL_NUMBER_OF_CELLS_PER_MAP) + x;
-                if (!isCellMarked(cell_id))
-                {
-                    markCell(cell_id);
-                    CellPair pair(x, y);
-                    Cell cell(pair);
-                    cell.SetNoCreate();
-                    Visit(cell, grid_object_update);
-                    Visit(cell, world_object_update);
-                }
+                if (Unit* unit = ref->getSource()->getOwner())
+                    if (unit->ToCreature() && unit->GetMapId() == plr->GetMapId() && !unit->IsWithinDistInMap(plr, GetVisibilityDistance(), false))
+                        _removeList.push_back(unit->ToCreature());
+
+                ref = ref->next();
+            }
+
+            for (std::vector<Creature*>::iterator it = _removeList.begin(); it != _removeList.end(); ++it)
+            {
+                (*it)->RemoveAurasByCaster(plr->GetObjectGuid());
+                (*it)->_removeAttacker(plr);
+                (*it)->GetHostileRefManager().deleteReference(plr);
+
+                href.deleteReference(*it);
+
+                VisitNearbyCellsOf(*it, grid_object_update, world_object_update);
             }
         }
     }
@@ -536,37 +582,17 @@ void Map::Update(const uint32& t_diff)
     {
         for (m_activeNonPlayersIter = m_activeNonPlayers.begin(); m_activeNonPlayersIter != m_activeNonPlayers.end();)
         {
-            // skip not in world
             WorldObject* obj = *m_activeNonPlayersIter;
 
             // step before processing, in this case if Map::Remove remove next object we correctly
             // step to next-next, and if we step to end() then newly added objects can wait next update.
             ++m_activeNonPlayersIter;
 
-            if (!obj->IsInWorld() || !obj->IsPositionValid())
+            // skip not in world
+            if (!obj || !obj->IsInWorld())
                 { continue; }
 
-            // lets update mobs/objects in ALL visible cells around player!
-            CellArea area = Cell::CalculateCellArea(obj->GetPositionX(), obj->GetPositionY(), GetVisibilityDistance());
-
-            for (uint32 x = area.low_bound.x_coord; x <= area.high_bound.x_coord; ++x)
-            {
-                for (uint32 y = area.low_bound.y_coord; y <= area.high_bound.y_coord; ++y)
-                {
-                    // marked cells are those that have been visited
-                    // don't visit the same cell twice
-                    uint32 cell_id = (y * TOTAL_NUMBER_OF_CELLS_PER_MAP) + x;
-                    if (!isCellMarked(cell_id))
-                    {
-                        markCell(cell_id);
-                        CellPair pair(x, y);
-                        Cell cell(pair);
-                        cell.SetNoCreate();
-                        Visit(cell, grid_object_update);
-                        Visit(cell, world_object_update);
-                    }
-                }
-            }
+            VisitNearbyCellsOf(obj, grid_object_update, world_object_update);
         }
     }
 
@@ -1192,14 +1218,22 @@ void Map::CreateInstanceData(bool load)
     if (i_data != NULL)
         { return; }
 
-    uint32 i_script_id = GetScriptId();
+#ifdef ENABLE_ELUNA
+    i_data = sEluna->GetInstanceData(this);
+#endif /* ENABLE_ELUNA */
 
-    if (!i_script_id)
-        { return; }
-
-    i_data = sScriptMgr.CreateInstanceData(this);
+    uint32 i_script_id = 0;
     if (!i_data)
-        { return; }
+    {
+        i_script_id = GetScriptId();
+
+        if (!i_script_id)
+            { return; }
+
+        i_data = sScriptMgr.CreateInstanceData(this);
+        if (!i_data)
+            { return; }
+    }
 
     if (load)
     {
@@ -1643,13 +1677,17 @@ bool Map::CanEnter(Player* player)
 }
 
 /// Put scripts in the execution queue
-bool Map::ScriptsStart(ScriptMapMapName const& scripts, uint32 id, Object* source, Object* target, ScriptExecutionParam execParams /*=SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE_TARGET*/)
+bool Map::ScriptsStart(DBScriptType type, uint32 id, Object* source, Object* target, ScriptExecutionParam execParams /*=SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE_TARGET*/)
 {
     MANGOS_ASSERT(source);
 
-    ///- Find the script map
-    ScriptMapMap::const_iterator s = scripts.second.find(id);
-    if (s == scripts.second.end())
+    ///- Find the script chain map
+    ScriptChainMap const *scm = sScriptMgr.GetScriptChainMap(type);
+    if (!scm)
+        { return false; }
+
+    ScriptChainMap::const_iterator s = scm->find(id);
+    if (s == scm->end())
         { return false; }
 
     // prepare static data
@@ -1661,23 +1699,23 @@ bool Map::ScriptsStart(ScriptMapMapName const& scripts, uint32 id, Object* sourc
     {
         for (ScriptScheduleMap::const_iterator searchItr = m_scriptSchedule.begin(); searchItr != m_scriptSchedule.end(); ++searchItr)
         {
-            if (searchItr->second.IsSameScript(scripts.first, id,
+            if (searchItr->second.IsSameScript(type, id,
                                                execParams & SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE ? sourceGuid : ObjectGuid(),
                                                execParams & SCRIPT_EXEC_PARAM_UNIQUE_BY_TARGET ? targetGuid : ObjectGuid(), ownerGuid))
             {
-                DEBUG_LOG("DB-SCRIPTS: Process table `%s` id %u. Skip script as script already started for source %s, target %s - ScriptsStartParams %u", scripts.first, id, sourceGuid.GetString().c_str(), targetGuid.GetString().c_str(), execParams);
+                DEBUG_LOG("DB-SCRIPTS: Process table `dbscripts [type=%d]` id %u. Skip script as script already started for source %s, target %s - ScriptsStartParams %u", type, id, sourceGuid.GetString().c_str(), targetGuid.GetString().c_str(), execParams);
                 return true;
             }
         }
     }
 
     ///- Schedule script execution for all scripts in the script map
-    ScriptMap const* s2 = &(s->second);
-    for (ScriptMap::const_iterator iter = s2->begin(); iter != s2->end(); ++iter)
+    ScriptChain const* s2 = &(s->second);
+    for (ScriptChain::const_iterator iter = s2->begin(); iter != s2->end(); ++iter)
     {
-        ScriptAction sa(scripts.first, this, sourceGuid, targetGuid, ownerGuid, &iter->second);
+        ScriptAction sa(type, this, sourceGuid, targetGuid, ownerGuid, &(*iter));
 
-        m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(sWorld.GetGameTime() + iter->first), sa));
+        m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(sWorld.GetGameTime() + iter->delay), sa));
 
         sScriptMgr.IncreaseScheduledScriptsCount();
     }
@@ -1694,7 +1732,7 @@ void Map::ScriptCommandStart(ScriptInfo const& script, uint32 delay, Object* sou
     ObjectGuid targetGuid = target ? target->GetObjectGuid() : ObjectGuid();
     ObjectGuid ownerGuid  = source->isType(TYPEMASK_ITEM) ? ((Item*)source)->GetOwnerGuid() : ObjectGuid();
 
-    ScriptAction sa("Internal Activate Command used for spell", this, sourceGuid, targetGuid, ownerGuid, &script);
+    ScriptAction sa(DBS_INTERNAL, this, sourceGuid, targetGuid, ownerGuid, &script);
 
     m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(sWorld.GetGameTime() + delay), sa));
 
@@ -1715,7 +1753,7 @@ void Map::ScriptsProcess()
         if (iter->second.HandleScriptStep())
         {
             // Terminate following script steps of this script
-            const char* tableName = iter->second.GetTableName();
+            DBScriptType type = iter->second.GetType();
             uint32 id = iter->second.GetId();
             ObjectGuid sourceGuid = iter->second.GetSourceGuid();
             ObjectGuid targetGuid = iter->second.GetTargetGuid();
@@ -1723,7 +1761,7 @@ void Map::ScriptsProcess()
 
             for (ScriptScheduleMap::iterator rmItr = m_scriptSchedule.begin(); rmItr != m_scriptSchedule.end();)
             {
-                if (rmItr->second.IsSameScript(tableName, id, sourceGuid, targetGuid, ownerGuid))
+                if (rmItr->second.IsSameScript(type, id, sourceGuid, targetGuid, ownerGuid))
                 {
                     m_scriptSchedule.erase(rmItr++);
                     sScriptMgr.DecreaseScheduledScriptCount();
@@ -2049,6 +2087,7 @@ bool Map::GetHeightInRange(float x, float y, float& z, float maxSearchDist /*= 4
 {
     float height, vmapHeight, mapHeight;
     vmapHeight = VMAP_INVALID_HEIGHT_VALUE;
+    mapHeight = INVALID_HEIGHT_VALUE;
 
     VMAP::IVMapManager* vmgr = VMAP::VMapFactory::createOrGetVMapManager();
     if (!vmgr->isLineOfSightCalcEnabled())
@@ -2200,25 +2239,39 @@ bool Map::GetReachableRandomPointOnGround(float& x, float& y, float& z, float ra
         return false;
 
     // here we have a valid position but the point can have a big Z in some case
-    // next code will check angle from 2 points
+    // next code will check angle from 2 points of view: x-axis and y-axis movement
     //        c
     //       /|
     //      / |
     //    b/__|a
 
     // project vector to get only positive value
-    float ab = fabs(x - i_x);
     float ac = fabs(z - i_z);
+    float delta = 0;
 
-    // slope represented by c angle (in radian)
+    // slope represented by b angle (in radian)
     float slope = 0;
     const float MAX_SLOPE_IN_RADIAN = 50.0f / 180.0f * M_PI_F;  // 50(degree) max seem best value for walkable slope
 
-    // check ab vector to avoid divide by 0
-    if (ab > 0.0f)
+    delta = fabs(x - i_x);  // check x-axis movement
+    if (delta > 0.0f)       // check to avoid divide by 0
     {
-        // compute c angle and convert it from radian to degree
-        slope = atan(ac / ab);
+        // compute slope
+        slope = atan(ac / delta);
+        if (slope < MAX_SLOPE_IN_RADIAN)
+        {
+            x = i_x;
+            y = i_y;
+            z = i_z;
+            return true;
+        }
+    }
+
+    delta = fabs(y - i_y);  // check y-axis movement
+    if (delta > 0.0f)       // check to avoid divide by 0
+    {
+        // compute slope
+        slope = atan(ac / delta);
         if (slope < MAX_SLOPE_IN_RADIAN)
         {
             x = i_x;
@@ -2253,21 +2306,19 @@ bool Map::GetReachableRandomPosition(Unit* unit, float& x, float& y, float& z, f
             isSwimming = static_cast<Creature*>(unit)->IsSwimming();
             break;
         default:
-            sLog.outError("Map::GetReachableRandomPosition> Unsupported unit type is passed!");
+            sLog.outError("Map::GetReachableRandomPosition> Unsupported unit (%s) is passed!", unit->GetGuidStr().c_str());
             return false;
     }
 
     if (radius < 0.1f)
     {
-        sLog.outError("Map::GetReachableRandomPosition> Unsupported unit type is passed!");
+        sLog.outError("Map::GetReachableRandomPosition> Invalid radius (%f) for %s", radius, unit->GetGuidStr().c_str());
         return false;
     }
 
     if (isFlying)
     {
         newDestAssigned = GetRandomPointInTheAir(i_x, i_y, i_z, radius);
-        /*if (newDestAssigned)
-        sLog.outString("Generating air random point for %s", GetGuidStr().c_str());*/
     }
     else
     {
@@ -2276,14 +2327,10 @@ bool Map::GetReachableRandomPosition(Unit* unit, float& x, float& y, float& z, f
         if (isSwimming && (res & (LIQUID_MAP_UNDER_WATER | LIQUID_MAP_IN_WATER)))
         {
             newDestAssigned = GetRandomPointUnderWater(i_x, i_y, i_z, radius, liquid_status);
-            /*if (newDestAssigned)
-            sLog.outString("Generating swim random point for %s", GetGuidStr().c_str());*/
         }
         else
         {
             newDestAssigned = GetReachableRandomPointOnGround(i_x, i_y, i_z, radius);
-            /*if (newDestAssigned)
-            sLog.outString("Generating ground random point for %s", GetGuidStr().c_str());*/
         }
     }
 

@@ -310,7 +310,14 @@ bool Unit::IsTriggeredAtSpellProcEvent(Unit* pVictim, SpellAuraHolder* holder, S
         modOwner->ApplySpellMod(spellProto->Id, SPELLMOD_CHANCE_OF_SUCCESS, chance);
     }
 
-    return roll_chance_f(chance);
+    if (!roll_chance_f(chance))
+       {
+       // Break stealth on sap if improved sap doesnt proc
+       if ((procSpell && procSpell->SpellIconID == 249 && procSpell->SpellVisual == 257) && (spellProto->SpellFamilyName == SPELLFAMILY_ROGUE && spellProto->SpellIconID == 249 && spellProto->SpellVisual == 0))
+       RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH);
+       return false;
+       }
+    return true;
 }
 
 SpellAuraProcResult Unit::HandleHasteAuraProc(Unit* pVictim, uint32 damage, Aura* triggeredByAura, SpellEntry const* /*procSpell*/, uint32 /*procFlag*/, uint32 /*procEx*/, uint32 cooldown)
@@ -699,6 +706,7 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(Unit* pVictim, uint32 damage, Aura
                 uint32 spellId;
                 switch (triggeredByAura->GetId())
                 {
+                    case 20154:
                     case 21084: spellId = 25742; break;     // Rank 1
                     case 20287: spellId = 25740; break;     // Rank 2
                     case 20288: spellId = 25739; break;     // Rank 3
@@ -716,14 +724,25 @@ SpellAuraProcResult Unit::HandleDummyAuraProc(Unit* pVictim, uint32 damage, Aura
 
                 int damagePoint;
 
+                // Talent - Improve Seal of Righteousness
+                uint32 ModSpellId[] = { 20224, 20225, 20330, 20331, 20332 };
+                float ModPct = 1.0f;
+                AuraList const& mModDamagePercentModifier = GetAurasByType(SPELL_AURA_ADD_PCT_MODIFIER);
+                for (AuraList::const_iterator i = mModDamagePercentModifier.begin(); i != mModDamagePercentModifier.end(); ++i)
+                {
+                    for (int j = 0; j < 5; j++)
+                    {
+                        if ((*i)->GetId() == ModSpellId[j])
+                            ModPct *= ((*i)->GetModifier()->m_amount + 100.0f) / 100.0f;
+                    }
+                }
+                triggerAmount = triggerAmount * ModPct;
+
                 // In the description, we can find the divider of the base points for min/max effects.
                 int min=triggerAmount/87;
                 int max=triggerAmount/25;
 
                 damagePoint = (speed<=1.5?min:(speed>=4.0?max:min+(((max-min)/2.5f)*(speed-1.5))));
-
-                damagePoint = SpellDamageBonusDone(pVictim, dummySpell, damagePoint, SPELL_DIRECT_DAMAGE);
-                damagePoint = pVictim->SpellDamageBonusTaken(this, dummySpell, damagePoint, SPELL_DIRECT_DAMAGE);
 
                 CastCustomSpell(pVictim, spellId, &damagePoint, NULL, NULL, true, NULL, triggeredByAura);
                 return SPELL_AURA_PROC_OK;                  // no hidden cooldown
@@ -937,7 +956,7 @@ SpellAuraProcResult Unit::HandleProcTriggerSpellAuraProc(Unit* pVictim, uint32 d
             break;
         case SPELLFAMILY_WARRIOR:
             // Deep Wounds (replace triggered spells to directly apply DoT), dot spell have familyflags
-            if (auraSpellInfo->SpellFamilyFlags == UI64LIT(0x0) && auraSpellInfo->SpellIconID == 243)
+            if (!auraSpellInfo->SpellFamilyFlags && auraSpellInfo->SpellIconID == 243)
             {
                 float weaponDamage;
                 // DW should benefit of attack power, damage percent mods etc.
@@ -1160,8 +1179,8 @@ SpellAuraProcResult Unit::HandleProcTriggerSpellAuraProc(Unit* pVictim, uint32 d
         return SPELL_AURA_PROC_FAILED;
     }
 
-    // not allow proc extra attack spell at extra attack
-    if (m_extraAttacks && IsSpellHaveEffect(triggerEntry, SPELL_EFFECT_ADD_EXTRA_ATTACKS))
+    // not allow proc extra attack spell at extra attack, except the paladin Reckoning with hacky limitation in the spelleffect
+    if (m_extraAttacks && triggerEntry->HasSpellEffect(SPELL_EFFECT_ADD_EXTRA_ATTACKS) && triggerEntry->Id != 20178)
         { return SPELL_AURA_PROC_FAILED; }
 
     // Custom basepoints/target for exist spell

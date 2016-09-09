@@ -255,7 +255,7 @@ class BattleGroundAB : public BattleGround
          * @param source
          * @param trigger
          */
-        void HandleAreaTrigger(Player* source, uint32 trigger) override;
+        bool HandleAreaTrigger(Player* source, uint32 trigger) override;
         /**
          * @brief
          *
@@ -301,6 +301,13 @@ class BattleGroundAB : public BattleGround
          * @param target_obj
          */
         virtual void EventPlayerClickedOnFlag(Player* source, GameObject* target_obj) override;
+
+        /* Premature finish */
+        /**
+         * @brief
+         *
+         */
+        virtual Team GetPrematureWinner() override;
 
     private:
         /* Gameobject spawning/despawning */

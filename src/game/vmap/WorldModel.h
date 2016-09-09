@@ -25,13 +25,14 @@
 #ifndef MANGOS_H_WORLDMODEL
 #define MANGOS_H_WORLDMODEL
 
+#include "Platform/Define.h"
+
 #include <G3D/HashTrait.h>
 #include <G3D/Vector3.h>
 #include <G3D/AABox.h>
 #include <G3D/Ray.h>
 #include "BIH.h"
 
-#include "Platform/Define.h"
 
 namespace VMAP
 {
@@ -356,6 +357,7 @@ namespace VMAP
              * @return bool
              */
             bool readFile(const std::string& filename);
+            uint32 Flags;
         protected:
             uint32 RootWMOID; /**< TODO */
             std::vector<GroupModel> groupModels; /**< TODO */

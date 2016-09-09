@@ -1028,7 +1028,9 @@ void PoolManager::LoadFromDB()
         {
                 PoolTemplateData& pPoolTemplate = mPoolTemplate[pool_entry];
                 pPoolTemplate.MaxLimit = 0;
-                pPoolTemplate.description = "autopool zone %u" ,pool_entry ;
+                std::ostringstream sZone;
+                sZone << "autopool zone " << pool_entry;
+                pPoolTemplate.description = sZone.str();
                 pPoolTemplate.AutoSpawn = true;          // will update and later data loading
         }
 
@@ -1092,7 +1094,7 @@ void PoolManager::LoadFromDB()
                 pool_id = zone_id + max_pool_id + 3486; //3486 zero value for maxzoneID
             }
 
-            PoolTemplateData* pPoolTemplate = &mPoolTemplate[pool_id];
+            //PoolTemplateData* pPoolTemplate = &mPoolTemplate[pool_id];
 
             PoolObject plObject = PoolObject(guid, 0);
             PoolGroup<GameObject>& gogroup = mPoolGameobjectGroups[pool_id];

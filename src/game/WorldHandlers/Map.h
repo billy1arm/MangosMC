@@ -64,6 +64,8 @@ class GridMap;
 class GameObjectModel;
 class WeatherSystem;
 
+namespace MaNGOS { struct ObjectUpdater; }
+
 // GCC have alternative #pragma pack(N) syntax and old gcc version not support pack(push,N), also any gcc version not support it at some platform
 #if defined( __GNUC__ )
 #pragma pack(1)
@@ -214,7 +216,7 @@ class Map : public GridRefManager<NGridType>
             SCRIPT_EXEC_PARAM_UNIQUE_BY_TARGET        = 0x02,   // Start Script only if not yet started (uniqueness identified by id and target)
             SCRIPT_EXEC_PARAM_UNIQUE_BY_SOURCE_TARGET = 0x03,   // Start Script only if not yet started (uniqueness identified by id, source and target)
         };
-        bool ScriptsStart(ScriptMapMapName const& scripts, uint32 id, Object* source, Object* target, ScriptExecutionParam execParams = SCRIPT_EXEC_PARAM_NONE);
+        bool ScriptsStart(DBScriptType type, uint32 id, Object* source, Object* target, ScriptExecutionParam execParams = SCRIPT_EXEC_PARAM_NONE);
         void ScriptCommandStart(ScriptInfo const& script, uint32 delay, Object* source, Object* target);
 
         // must called with AddToWorld
@@ -321,6 +323,7 @@ class Map : public GridRefManager<NGridType>
             return i_grids[x][y];
         }
 
+        void VisitNearbyCellsOf(WorldObject* obj, TypeContainerVisitor<MaNGOS::ObjectUpdater, GridTypeMapContainer> &gridVisitor, TypeContainerVisitor<MaNGOS::ObjectUpdater, WorldTypeMapContainer> &worldVisitor);
         bool isGridObjectDataLoaded(uint32 x, uint32 y) const { return getNGrid(x, y)->isGridObjectDataLoaded(); }
         void setGridObjectDataLoaded(bool pLoaded, uint32 x, uint32 y) { getNGrid(x, y)->setGridObjectDataLoaded(pLoaded); }
 

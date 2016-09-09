@@ -126,7 +126,7 @@ bool LoginQueryHolder::Initialize()
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADSPELLS,          "SELECT spell,active,disabled FROM character_spell WHERE guid = '%u'", m_guid.GetCounter());
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADQUESTSTATUS,     "SELECT quest,status,rewarded,explored,timer,mobcount1,mobcount2,mobcount3,mobcount4,itemcount1,itemcount2,itemcount3,itemcount4 FROM character_queststatus WHERE guid = '%u'", m_guid.GetCounter());
 #if defined(CLASSIC)
-    res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADHONORCP,         "SELECT victim_type,victim,honor,date,type FROM character_honor_cp WHERE guid = '%u'", m_guid.GetCounter());
+    res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADHONORCP,         "SELECT victim_type,victim,honor,date,type FROM character_honor_cp WHERE used=0 AND guid = '%u'", m_guid.GetCounter());
 #endif
 #if defined(TBC)
     res &= SetPQuery(PLAYER_LOGIN_QUERY_LOADDAILYQUESTSTATUS, "SELECT quest FROM character_queststatus_daily WHERE guid = '%u'", m_guid.GetCounter());

@@ -32,6 +32,11 @@
 
 static_assert(MAXIMAL_AI_EVENT_EVENTAI <= 32, "Maximal 32 AI_EVENTs supported with EventAI");
 
+CreatureAI::CreatureAI(Creature* creature) : m_creature(creature), m_combatMovement(CM_SCRIPT),
+                                             m_attackDistance(0.0f), m_attackAngle(0.0f)
+{
+}
+
 CreatureAI::~CreatureAI()
 {
 }
@@ -52,7 +57,7 @@ CanCastResult CreatureAI::CanCastSpell(Unit* pTarget, const SpellEntry* pSpell, 
             { return CAST_FAIL_STATE; }
 
         if (pSpell->PreventionType == SPELL_PREVENTION_TYPE_SILENCE && m_creature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SILENCED))
-            { return CAST_FAIL_STATE; }
+            { return CAST_FAIL_SILENCED; }
 
         if (pSpell->PreventionType == SPELL_PREVENTION_TYPE_PACIFY && m_creature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PACIFIED))
             { return CAST_FAIL_STATE; }
@@ -61,6 +66,9 @@ CanCastResult CreatureAI::CanCastSpell(Unit* pTarget, const SpellEntry* pSpell, 
         if (m_creature->GetPower((Powers)pSpell->powerType) < Spell::CalculatePowerCost(pSpell, m_creature))
             { return CAST_FAIL_POWER; }
     }
+
+    if (!m_creature->IsWithinLOSInMap(pTarget))
+        { return CAST_FAIL_NO_LOS; }
 
     if (const SpellRangeEntry* pSpellRange = sSpellRangeStore.LookupEntry(pSpell->rangeIndex))
     {
@@ -91,7 +99,6 @@ CanCastResult CreatureAI::DoCastSpellIfCan(Unit* pTarget, uint32 uiSpell, uint32
     if (uiCastFlags & CAST_FORCE_TARGET_SELF)
         { pCaster = pTarget; }
 
-    // Allowed to cast only if not casting (unless we interrupt ourself) or if spell is triggered
     if (!pCaster->IsNonMeleeSpellCasted(false) || (uiCastFlags & (CAST_TRIGGERED | CAST_INTERRUPT_PREVIOUS)))
     {
         if (const SpellEntry* pSpell = sSpellStore.LookupEntry(uiSpell))
@@ -109,24 +116,27 @@ CanCastResult CreatureAI::DoCastSpellIfCan(Unit* pTarget, uint32 uiSpell, uint32
                 CanCastResult castResult = CanCastSpell(pTarget, pSpell, uiCastFlags & CAST_TRIGGERED);
 
                 if (castResult != CAST_OK)
-                    { return castResult; }
+                { 
+                    return castResult;
+                }
             }
 
-            // Interrupt any previous spell
-            if (uiCastFlags & CAST_INTERRUPT_PREVIOUS && pCaster->IsNonMeleeSpellCasted(false))
-                { pCaster->InterruptNonMeleeSpells(false); }
+            if ( (uiCastFlags & CAST_INTERRUPT_PREVIOUS) && pCaster->IsNonMeleeSpellCasted(false))
+                pCaster->CastStop();
+
+            pCaster->StopMoving();
 
             pCaster->CastSpell(pTarget, pSpell, uiCastFlags & CAST_TRIGGERED, NULL, NULL, uiOriginalCasterGUID);
             return CAST_OK;
         }
         else
         {
-            sLog.outErrorDb("DoCastSpellIfCan by creature entry %u attempt to cast spell %u but spell does not exist.", m_creature->GetEntry(), uiSpell);
+            sLog.outErrorDb("DoCastSpellIfCan: %s attempt to cast spell %u but spell does not exist.",
+                            m_creature->GetGuidStr().c_str(), uiSpell);
             return CAST_FAIL_OTHER;
         }
     }
-    else
-        { return CAST_FAIL_IS_CASTING; }
+    return CAST_FAIL_IS_CASTING;
 }
 
 bool CreatureAI::DoMeleeAttackIfReady()
@@ -136,29 +146,66 @@ bool CreatureAI::DoMeleeAttackIfReady()
 
 void CreatureAI::SetCombatMovement(bool enable, bool stopOrStartMovement /*=false*/)
 {
-    m_isCombatMovement = enable;
+    SetCombatMovementFlag(CM_SCRIPT, enable);
 
-    if (enable)
-        { m_creature->clearUnitState(UNIT_STAT_NO_COMBAT_MOVEMENT); }
-    else
-        { m_creature->addUnitState(UNIT_STAT_NO_COMBAT_MOVEMENT); }
+    if (stopOrStartMovement)     // Only change current movement while in combat
+        SetChase(enable);
+}
 
-    if (stopOrStartMovement && m_creature->getVictim())     // Only change current movement while in combat
+void CreatureAI::SetCombatMovementFlag(uint8 flag, bool setFlag)
+{
+    if (setFlag)
     {
-        if (enable)
-            { m_creature->GetMotionMaster()->MoveChase(m_creature->getVictim(), m_attackDistance, m_attackAngle); }
-        else if (!enable && m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
-            { m_creature->StopMoving(); }
+        m_combatMovement |= flag;
+        if (m_combatMovement)
+            m_creature->clearUnitState(UNIT_STAT_NO_COMBAT_MOVEMENT);
+    }
+    else
+    {
+        m_combatMovement &= ~flag;
+        if (m_combatMovement == 0)
+            m_creature->addUnitState(UNIT_STAT_NO_COMBAT_MOVEMENT);
+    }
+}
+
+void CreatureAI::SetChase(bool chase)
+{
+    if (IsCombatMovement() && m_creature->getVictim())
+    {
+        MotionMaster* creatureMotion = m_creature->GetMotionMaster();
+        if (chase)
+        {
+            switch(creatureMotion->GetCurrentMovementGeneratorType())
+            {
+                case IDLE_MOTION_TYPE:
+                case CHASE_MOTION_TYPE:
+                case FOLLOW_MOTION_TYPE:
+                    creatureMotion->Clear(false);
+                    creatureMotion->MoveChase(m_creature->getVictim(), 0.0f, 0.0f);
+                    break;
+                default:
+                    break;
+            }
+        }
+        else if (creatureMotion->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
+        {
+            m_creature->StopMoving();
+            if (!m_creature->CanReachWithMeleeAttack(m_creature->getVictim()))
+                m_creature->SendMeleeAttackStop(m_creature->getVictim());
+        }
     }
 }
 
 void CreatureAI::HandleMovementOnAttackStart(Unit* victim)
 {
     MotionMaster* creatureMotion = m_creature->GetMotionMaster();
-    if (m_isCombatMovement)
-        { creatureMotion->MoveChase(victim, m_attackDistance, m_attackAngle); }
+    MovementGeneratorType mmgen = creatureMotion->GetCurrentMovementGeneratorType();
+    
+    if (IsCombatMovement())
+      { creatureMotion->MoveChase(victim, m_attackDistance, m_attackAngle); }
+
     // TODO - adapt this to only stop OOC-MMGens when MotionMaster rewrite is finished
-    else if (creatureMotion->GetCurrentMovementGeneratorType() == WAYPOINT_MOTION_TYPE || creatureMotion->GetCurrentMovementGeneratorType() == RANDOM_MOTION_TYPE)
+    else if (mmgen == WAYPOINT_MOTION_TYPE || mmgen == RANDOM_MOTION_TYPE)
     {
         creatureMotion->MoveIdle();
         m_creature->StopMoving();

@@ -55,6 +55,7 @@
 #include "CellImpl.h"
 #include "movement/MoveSplineInit.h"
 #include "CreatureLinkingMgr.h"
+#include "DisableMgr.h"
 #ifdef ENABLE_ELUNA
 #include "LuaEngine.h"
 #endif /* ENABLE_ELUNA */
@@ -150,7 +151,7 @@ Creature::Creature(CreatureSubtype subtype) : Unit(),
     m_AlreadyCallAssistance(false), m_AlreadySearchedAssistance(false),
     m_AI_locked(false), m_IsDeadByDefault(false), m_temporaryFactionFlags(TEMPFACTION_NONE),
     m_meleeDamageSchoolMask(SPELL_SCHOOL_MASK_NORMAL), m_originalEntry(0),
-    m_creatureInfo(NULL)
+    m_creatureInfo(NULL), m_PlayerDamageReq(0)
 {
     /* Loot data */
     hasBeenLootedOnce = false;
@@ -183,12 +184,11 @@ Creature::~Creature()
 void Creature::AddToWorld()
 {
 #ifdef ENABLE_ELUNA
-    if (!IsInWorld())
-        sEluna->OnAddToWorld(this);
+    bool inWorld = IsInWorld();
 #endif /* ENABLE_ELUNA */
 
     ///- Register the creature for guid lookup
-    if (!IsInWorld() && GetObjectGuid().GetHigh() == HIGHGUID_UNIT)
+    if (!IsInWorld() && GetObjectGuid().IsCreature())
         { GetMap()->GetObjectsStore().insert<Creature>(GetObjectGuid(), (Creature*)this); }
 
     Unit::AddToWorld();
@@ -197,6 +197,11 @@ void Creature::AddToWorld()
     std::set<uint32> const* mapList = sWorld.getConfigForceLoadMapIds();
     if ((mapList && mapList->find(GetMapId()) != mapList->end()) || (GetCreatureInfo()->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE))
         { SetActiveObjectState(true); }
+
+#ifdef ENABLE_ELUNA
+    if (!inWorld)
+        sEluna->OnAddToWorld(this);
+#endif /* ENABLE_ELUNA */
 }
 
 void Creature::RemoveFromWorld()
@@ -207,20 +212,22 @@ void Creature::RemoveFromWorld()
 #endif /* ENABLE_ELUNA */
 
     ///- Remove the creature from the accessor
-    if (IsInWorld() && GetObjectGuid().GetHigh() == HIGHGUID_UNIT)
+    if (IsInWorld() && GetObjectGuid().IsCreature())
         { GetMap()->GetObjectsStore().erase<Creature>(GetObjectGuid(), (Creature*)NULL); }
 
     Unit::RemoveFromWorld();
 }
 
-void Creature::RemoveCorpse()
+void Creature::RemoveCorpse(bool inPlace)
 {
-    // since pool system can fail to roll unspawned object, this one can remain spawned, so must set respawn nevertheless
-    if (uint16 poolid = sPoolMgr.IsPartOfAPool<Creature>(GetGUIDLow()))
-        { sPoolMgr.UpdatePool<Creature>(*GetMap()->GetPersistentState(), poolid, GetGUIDLow()); }
-
-    if (!IsInWorld())                            // can be despawned by update pool
-        { return; }
+    if (!inPlace)
+    {
+        // since pool system can fail to roll unspawned object, this one can remain spawned, so must set respawn nevertheless
+        if (uint16 poolid = sPoolMgr.IsPartOfAPool<Creature>(GetGUIDLow()))
+            { sPoolMgr.UpdatePool<Creature>(*GetMap()->GetPersistentState(), poolid, GetGUIDLow()); }
+        if (!IsInWorld())                            // can be despawned by update pool
+            { return; }
+    }
 
     if ((GetDeathState() != CORPSE && !m_IsDeadByDefault) || (GetDeathState() != ALIVE && m_IsDeadByDefault))
         { return; }
@@ -378,7 +385,8 @@ bool Creature::InitEntry(uint32 Entry, Team team, CreatureData const* data /*=NU
     // check if we need to add swimming movement. TODO: i thing movement flags should be computed automatically at each movement of creature so we need a sort of UpdateMovementFlags() method
     if (cinfo->InhabitType & INHABIT_WATER &&                                   // check inhabit type water
         data &&                                                                 // check if there is data to get creature spawn pos
-        GetMap()->GetTerrain()->IsInWater(data->posX, data->posY, data->posZ))  // check if creature is in water
+        !(cinfo->ExtraFlags & CREATURE_EXTRA_FLAG_WALK_IN_WATER) &&             // check if creature is forced to walk (crabs, giant,...)
+        GetMap()->GetTerrain()->IsSwimmable(data->posX, data->posY, data->posZ, minfo->bounding_radius))  // check if creature is in water and have enough space to swim
         m_movementInfo.AddMovementFlag(MOVEFLAG_SWIMMING);                      // add swimming movement
 
     // checked at loading
@@ -416,6 +424,11 @@ bool Creature::UpdateEntry(uint32 Entry, Team team, const CreatureData* data /*=
     // we may need to append or remove additional flags
     if (HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT))
         { unitFlags |= UNIT_FLAG_IN_COMBAT; }
+
+    if (m_movementInfo.HasMovementFlag(MOVEFLAG_SWIMMING) && (GetCreatureInfo()->ExtraFlags & CREATURE_EXTRA_FLAG_HAVE_NO_SWIM_ANIMATION) == 0)
+        unitFlags |= UNIT_FLAG_UNK_15;
+    else
+        unitFlags &= ~UNIT_FLAG_UNK_15;
 
     SetUInt32Value(UNIT_FIELD_FLAGS, unitFlags);
 
@@ -473,11 +486,13 @@ uint32 Creature::ChooseDisplayId(const CreatureInfo* cinfo, const CreatureData* 
 
     // model selected here may be replaced with other_gender using own function
     if (!cinfo->ModelId[1])
-    {
-        display_id = cinfo->ModelId[0];
-    }
-    else
+        { display_id = cinfo->ModelId[0]; }
+    else if (!cinfo->ModelId[2])
         { display_id = cinfo->ModelId[urand(0, 1)]; }
+    else if (!cinfo->ModelId[3])
+        { display_id = cinfo->ModelId[urand(0, 2)]; }
+    else
+        { display_id = cinfo->ModelId[urand(0, 3)]; }
 
     // fail safe, we use creature entry 1 and make error
     if (!display_id)
@@ -1124,7 +1139,8 @@ void Creature::SaveToDB(uint32 mapid)
     CreatureInfo const* cinfo = GetCreatureInfo();
     if (cinfo)
     {
-        if (displayId != cinfo->ModelId[0] && displayId != cinfo->ModelId[1])
+        if (displayId != cinfo->ModelId[0] && displayId != cinfo->ModelId[1] &&
+            displayId != cinfo->ModelId[2] && displayId != cinfo->ModelId[3])
         {
             for (int i = 0; i < MAX_CREATURE_MODEL && displayId; ++i)
                 if (cinfo->ModelId[i])
@@ -1247,10 +1263,12 @@ void Creature::SelectLevel(const CreatureInfo* cinfo, float percentHealth /*= 10
     else
         { SetHealthPercent(percentHealth); }
 
+    ResetPlayerDamageReq();
+
     SetModifierValue(UNIT_MOD_HEALTH, BASE_VALUE, float(health));
 
     // all power types
-    for (int i = POWER_MANA; i <= POWER_HAPPINESS; ++i)
+    for (uint8 i = POWER_MANA; i <= POWER_HAPPINESS; ++i)
     {
         uint32 maxValue;
 
@@ -1329,6 +1347,12 @@ float Creature::_GetDamageMod(int32 Rank)
         default:
             return sWorld.getConfig(CONFIG_FLOAT_RATE_CREATURE_ELITE_ELITE_DAMAGE);
     }
+}
+
+void Creature::LowerPlayerDamageReq(uint32 unDamage)
+{
+    if (m_PlayerDamageReq)
+        m_PlayerDamageReq > unDamage ? m_PlayerDamageReq -= unDamage : m_PlayerDamageReq = 0;
 }
 
 float Creature::_GetSpellDamageMod(int32 Rank)
@@ -1647,6 +1671,7 @@ void Creature::SetDeathState(DeathState s)
         // Dynamic flags must be set on Tapped by default.
         SetUInt32Value(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_NONE);
         LoadCreatureAddon(true);
+        ResetPlayerDamageReq();
 
         // Flags after LoadCreatureAddon. Any spell in *addon
         // will not be able to adjust these.
@@ -1688,7 +1713,7 @@ void Creature::ForcedDespawn(uint32 timeMSToDespawn)
     if (IsAlive())
         { SetDeathState(JUST_DIED); }
 
-    RemoveCorpse();
+    RemoveCorpse(true);                                     // force corpse removal in the same grid
 
     SetHealth(0);                                           // just for nice GM-mode view
 }
@@ -1794,16 +1819,7 @@ SpellEntry const* Creature::ReachWithSpellCure(Unit* pVictim)
             continue;
         }
 
-        bool bcontinue = true;
-        for (int j = 0; j < MAX_EFFECT_INDEX; ++j)
-        {
-            if ((spellInfo->Effect[j] == SPELL_EFFECT_HEAL))
-            {
-                bcontinue = false;
-                break;
-            }
-        }
-        if (bcontinue)
+        if (!spellInfo->HasSpellEffect(SPELL_EFFECT_HEAL))
             { continue; }
 
         if (spellInfo->manaCost > GetPower(POWER_MANA))
@@ -2121,7 +2137,7 @@ bool Creature::MeetsSelectAttackingRequirement(Unit* pTarget, SpellEntry const* 
     if (selectFlags & SELECT_FLAG_NOT_IN_MELEE_RANGE && CanReachWithMeleeAttack(pTarget))
         { return false; }
 
-    if (selectFlags & SELECT_FLAG_IN_LOS && !IsWithinLOSInMap(pTarget))
+    if (selectFlags & SELECT_FLAG_IN_LOS && !DisableMgr::IsDisabledFor(DISABLE_TYPE_SPELL, pSpellInfo->Id, pTarget, SPELL_DISABLE_LOS) && !IsWithinLOSInMap(pTarget))
         { return false; }
 
     if (pSpellInfo)
@@ -2685,7 +2701,7 @@ void Creature::SetSwim(bool enable)
     SendMessageToSet(&data, true);
 }
 
-void Creature::SetCanFly(bool enable)
+void Creature::SetCanFly(bool /*enable*/)
 {
 //     TODO: check if there is something similar for 1.12.x (dragons and other flying NPCs)
 //     if (enable)

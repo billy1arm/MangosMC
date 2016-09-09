@@ -63,7 +63,7 @@ int CreatureEventAI::Permissible(const Creature* creature)
 void CreatureEventAI::GetAIInformation(ChatHandler& reader)
 {
     reader.PSendSysMessage(LANG_NPC_EVENTAI_PHASE, (uint32)m_Phase);
-    reader.PSendSysMessage(LANG_NPC_EVENTAI_MOVE, reader.GetOnOffStr(m_isCombatMovement));
+    reader.PSendSysMessage(LANG_NPC_EVENTAI_MOVE, reader.GetOnOffStr(IsCombatMovement()));
     reader.PSendSysMessage(LANG_NPC_EVENTAI_COMBAT, reader.GetOnOffStr(m_MeleeEnabled));
 
     if (sLog.HasLogFilter(LOG_FILTER_EVENT_AI_DEV))         // Give some more details if in EventAI Dev Mode
@@ -84,6 +84,7 @@ void CreatureEventAI::GetAIInformation(ChatHandler& reader)
 CreatureEventAI::CreatureEventAI(Creature* c) : CreatureAI(c),
     m_Phase(0),
     m_MeleeEnabled(true),
+    m_currSpell(0),
     m_HasOOCLoSEvent(false),
     m_InvinceabilityHpLevel(0),
     m_throwAIEventMask(0),
@@ -627,6 +628,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
         {
             uint32 selectFlags = 0;
             uint32 spellId = 0;
+
             if (!(action.cast.castFlags & (CAST_TRIGGERED | CAST_FORCE_CAST | CAST_FORCE_TARGET_SELF)))
             {
                 spellId = action.cast.spellId;
@@ -637,41 +639,13 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             if (!target)
             {
                 if (reportTargetError)
-                    { sLog.outErrorEventAI("NULL target for ACTION_T_CAST creature entry %u casting spell id %u", m_creature->GetEntry(), action.cast.spellId); }
+                    { sLog.outErrorEventAI("NULL target for ACTION_T_CAST %s casting spell id %u", m_creature->GetGuidStr().c_str(), action.cast.spellId); }
                 return;
             }
 
-            CanCastResult castResult = DoCastSpellIfCan(target, action.cast.spellId, action.cast.castFlags);
+            DoCastSpellIfCan(target, action.cast.spellId, action.cast.castFlags);
 
-            switch (castResult)
-            {
-                case CAST_FAIL_POWER:
-                case CAST_FAIL_TOO_FAR:
-                {
-                    // Melee current victim if flag not set
-                    if (!(action.cast.castFlags & CAST_NO_MELEE_IF_OOM))
-                    {
-                        switch (m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType())
-                        {
-                            case CHASE_MOTION_TYPE:
-                            case FOLLOW_MOTION_TYPE:
-                                m_attackDistance = 0.0f;
-                                m_attackAngle = 0.0f;
-
-                                m_creature->GetMotionMaster()->Clear(false);
-                                m_creature->GetMotionMaster()->MoveChase(m_creature->getVictim(), m_attackDistance, m_attackAngle);
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    break;
-                }
-                default:
-                    break;
-            }
-
-            break;
+        break;
         }
         case ACTION_T_SUMMON:               //12
         {
@@ -755,17 +729,22 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             m_MeleeEnabled = action.auto_attack.state != 0;
             break;
         case ACTION_T_COMBAT_MOVEMENT:      //21
+        {
             // ignore no affect case
-            if (m_isCombatMovement == (action.combat_movement.state != 0) || m_creature->IsNonMeleeSpellCasted(false))
-                { return; }
+            if ((GetCombatMovementFlags() & CM_SCRIPT) == (action.combat_movement.state != 0))
+                return;
 
             SetCombatMovement(action.combat_movement.state != 0, true);
 
-            if (m_isCombatMovement && action.combat_movement.melee && m_creature->IsInCombat() && m_creature->getVictim())
-                { m_creature->SendMeleeAttackStart(m_creature->getVictim()); }
-            else if (action.combat_movement.melee && m_creature->IsInCombat() && m_creature->getVictim())
-                { m_creature->SendMeleeAttackStop(m_creature->getVictim()); }
+            if (m_creature->IsInCombat() && m_creature->getVictim())
+            {
+                if (IsCombatMovement() && action.combat_movement.melee)
+                    m_creature->SendMeleeAttackStart(m_creature->getVictim());
+                else if (action.combat_movement.melee)
+                    m_creature->SendMeleeAttackStop(m_creature->getVictim());
+            }
             break;
+        }
         case ACTION_T_SET_PHASE:            //22
             m_Phase = action.set_phase.phase;
             DEBUG_FILTER_LOG(LOG_FILTER_EVENT_AI_DEV, "CreatureEventAI: ACTION_T_SET_PHASE - script %u for %s, phase is now %u", EventId, m_creature->GetGuidStr().c_str(), m_Phase);
@@ -817,7 +796,7 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             m_attackDistance = (float)action.ranged_movement.distance;
             m_attackAngle = action.ranged_movement.angle / 180.0f * M_PI_F;
 
-            if (m_isCombatMovement)
+            if (IsCombatMovement())
             {
                 if (m_creature->GetMotionMaster()->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
                 {
@@ -1066,6 +1045,8 @@ void CreatureEventAI::ProcessAction(CreatureEventAI_Action const& action, uint32
             m_creature->HandleEmote(action.emoteTarget.emoteId);
             break;
         }
+        default:
+            break;
     }
 }
 
@@ -1089,6 +1070,7 @@ void CreatureEventAI::JustRespawned()                       // NOTE that this is
 
 void CreatureEventAI::Reset()
 {
+    m_currSpell = 0;
     m_EventUpdateTime = EVENT_UPDATE_TIME;
     m_EventDiff = 0;
     m_throwAIEventStep = 0;
@@ -1106,11 +1088,11 @@ void CreatureEventAI::Reset()
                     i->Enabled = true;
                 break;
             }
-            // default:
+            default:
             // TODO: enable below code line / verify this is correct to enable events previously disabled (ex. aggro yell), instead of enable this in void Aggro()
             //i->Enabled = true;
             //i->Time = 0;
-            // break;
+            break;
         }
     }
 }
@@ -1143,6 +1125,7 @@ void CreatureEventAI::EnterEvadeMode()
         if (i->Event.event_type == EVENT_T_EVADE)
             { ProcessEvent(*i); }
     }
+    m_creature->ResetPlayerDamageReq();
 }
 
 void CreatureEventAI::JustDied(Unit* killer)
@@ -1516,7 +1499,7 @@ void CreatureEventAI::ReceiveEmote(Player* pPlayer, uint32 text_emote)
     }
 }
 
-#define HEALTH_STEPS            3
+#define HEALTH_STEPS 3
 
 void CreatureEventAI::DamageTaken(Unit* dealer, uint32& damage)
 {
@@ -1595,3 +1578,71 @@ bool CreatureEventAI::SpawnedEventConditionsCheck(CreatureEventAI_Event const& e
 
     return false;
 }
+
+void CreatureEventAI::OnSpellCastChange(const SpellEntry* pSpell, SpellCastResult reason)
+{
+    //sLog.outError("Received reason %u for %s, spell %u (curSpell = %u)", reason, m_creature->GetGuidStr().c_str(), pSpell->Id, m_currSpell);
+    
+    if (!pSpell || pSpell->Id != m_currSpell)
+        return;
+
+    m_currSpell = 0;
+
+    switch (reason)
+    {
+        case SPELL_CAST_OK:
+            break;
+        // Add more cases here
+        case SPELL_FAILED_OUT_OF_RANGE:
+        case SPELL_FAILED_LINE_OF_SIGHT:
+        case SPELL_FAILED_NO_POWER:
+        case SPELL_FAILED_INTERRUPTED:
+        case SPELL_FAILED_SILENCED:
+            m_creature->CastStop();
+            SetCombatMovementFlag(CM_SPELL);
+            SetChase(true);
+            return;
+        default:
+            m_creature->CastStop();
+            break;
+    }
+    SetCombatMovementFlag(CM_SPELL, false);
+    SetChase(false);
+
+}
+
+CanCastResult CreatureEventAI::DoCastSpellIfCan(Unit* pTarget, uint32 uiSpell, uint32 uiCastFlags, ObjectGuid uiOriginalCasterGuid)
+{
+    SetCombatMovementFlag(CM_SPELL, false);
+    m_currSpell = uiSpell;
+    SetChase(false);
+
+    CanCastResult result = CreatureAI::DoCastSpellIfCan(pTarget, uiSpell, uiCastFlags, uiOriginalCasterGuid);
+    switch (result)
+    {
+        case CAST_OK:
+            break;
+        case CAST_FAIL_TOO_FAR:
+        case CAST_FAIL_NO_LOS:
+        case CAST_FAIL_POWER:
+        case CAST_FAIL_SILENCED:
+        {
+            if (!(uiCastFlags & CAST_NO_MELEE_IF_OOM))
+            {
+                SetCombatMovementFlag(CM_SPELL);
+                SetChase(true);
+            }
+            else
+            {
+                m_currSpell = 0;
+            }
+            break;
+        }
+        default:
+            m_currSpell = 0;
+            break;
+    }
+
+    return result;
+}
+

@@ -254,9 +254,9 @@ bool Pet::LoadPetFromDB(Player* owner, uint32 petentry, uint32 petnumber, bool c
     uint32 savedpower = fields[14].GetUInt32();
 
     // set current pet as current
-    // 0=current
-    // 1..MAX_PET_STABLES in stable slot
-    // PET_SAVE_NOT_IN_SLOT(100) = not stable slot (summoning))
+    // 0 = current
+    // 1..MAX_PET_STABLES = in stable slot
+    // PET_SAVE_NOT_IN_SLOT(100) = not stable slot (summoning) or hunter pet dead
     if (fields[10].GetUInt32() != 0)
     {
         CharacterDatabase.BeginTransaction();
@@ -327,6 +327,10 @@ bool Pet::LoadPetFromDB(Player* owner, uint32 petentry, uint32 petnumber, bool c
     {
         SetHealth(savedhealth > GetMaxHealth() ? GetMaxHealth() : savedhealth);
         SetPower(powerType, savedpower > GetMaxPower(powerType) ? GetMaxPower(powerType) : savedpower);
+
+        if (getPetType() == HUNTER_PET && savedhealth == 0)
+          SetDeathState(JUST_DIED);
+
     }
 
     AIM_Initialize();
@@ -390,6 +394,13 @@ void Pet::SavePetToDB(PetSaveMode mode)
         }
 
         uint32 curhealth = GetHealth();
+
+        if (getPetType() != HUNTER_PET)
+        {
+            if (curhealth < 1)
+              curhealth = 1;
+        }
+
         uint32 curpower = GetPower(GetPowerType());
 
         // stable and not in slot saves
@@ -402,9 +413,9 @@ void Pet::SavePetToDB(PetSaveMode mode)
         _SaveSpellCooldowns();
         _SaveAuras();
 
-        uint32 loyalty = 1;
-        if (getPetType() != HUNTER_PET)
-            { loyalty = GetLoyaltyLevel(); }
+        //uint32 loyalty = 1;
+        //if (getPetType() != HUNTER_PET)
+        //    { loyalty = GetLoyaltyLevel(); }
 
         uint32 ownerLow = GetOwnerGuid().GetCounter();
         // remove current data
@@ -450,7 +461,7 @@ void Pet::SavePetToDB(PetSaveMode mode)
         savePet.addUInt32(uint32(mode));
         savePet.addString(m_name);
         savePet.addUInt32(uint32(HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_RENAME) ? 0 : 1));
-        savePet.addUInt32((curhealth < 1 ? 1 : curhealth));
+        savePet.addUInt32((curhealth));
         savePet.addUInt32(curpower);
         savePet.addUInt32(GetPower(POWER_HAPPINESS));
 
@@ -551,7 +562,11 @@ void Pet::Update(uint32 update_diff, uint32 diff)
     {
         case CORPSE:
         {
-            Unsummon(PET_SAVE_NOT_IN_SLOT);
+            if (getPetType() != HUNTER_PET || m_corpseRemoveTime <= time(NULL))
+            {
+                Unsummon(PET_SAVE_NOT_IN_SLOT);
+                return;
+            }
             break;
         }
         case ALIVE:
@@ -986,7 +1001,6 @@ bool Pet::CreateBaseAtCreature(Creature* creature)
 
     uint32 guid = creature->GetMap()->GenerateLocalLowGuid(HIGHGUID_PET);
 
-    BASIC_LOG("Create pet");
     uint32 pet_number = sObjectMgr.GeneratePetNumber();
     if (!Create(guid, pos, creature->GetCreatureInfo(), pet_number))
         { return false; }
@@ -1080,9 +1094,9 @@ bool Pet::InitStatsForLevel(uint32 petlevel, Unit* owner)
 
     SetModifierValue(UNIT_MOD_ARMOR, BASE_VALUE, float(petlevel * 50));
 
-    SetAttackTime(BASE_ATTACK, BASE_ATTACK_TIME);
-    SetAttackTime(OFF_ATTACK, BASE_ATTACK_TIME);
-    SetAttackTime(RANGED_ATTACK, BASE_ATTACK_TIME);
+    SetAttackTime(BASE_ATTACK, cinfo->MeleeBaseAttackTime);
+    SetAttackTime(OFF_ATTACK, cinfo->MeleeBaseAttackTime);
+    SetAttackTime(RANGED_ATTACK, cinfo->RangedBaseAttackTime);
 
     SetFloatValue(UNIT_MOD_CAST_SPEED, 1.0);
 
@@ -1187,9 +1201,9 @@ bool Pet::InitStatsForLevel(uint32 petlevel, Unit* owner)
             SetUInt32Value(UNIT_FIELD_PETNEXTLEVELEXP, sObjectMgr.GetXPForPetLevel(petlevel));
             // these formula may not be correct; however, it is designed to be close to what it should be
             // this makes dps 0.5 of pets level
-            SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, float(0.5 * GetAttackTime(BASE_ATTACK) * (petlevel - (petlevel / 4)) / 1000));
-            SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(0.5 * GetAttackTime(BASE_ATTACK) * (petlevel + (petlevel / 4)) / 1000));
-            // damage is increased afterwards as strength and pet scaling modify attack power
+            SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, float(petlevel - (petlevel / 4)));
+            SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(petlevel + (petlevel / 4)));
+            // damage is modified afterwards based on creature attack power and attack speed
 
             // stored standard pet stats are entry 1 in pet_levelinfo
             PetLevelInfo const* pInfo = sObjectMgr.GetPetLevelInfo(creature_ID, petlevel);
@@ -1998,7 +2012,7 @@ void Pet::CastOwnerTalentAuras()
     if (!GetOwner() || GetOwner()->GetTypeId() != TYPEID_PLAYER)
         { return; }
 
-    Player* pOwner = static_cast<Player*>(GetOwner());
+    //Player* pOwner = static_cast<Player*>(GetOwner());
 
     // Add below code handling spells cast by pet when owner/player has aura from talent
 }
@@ -2055,4 +2069,133 @@ void Pet::ApplyModeFlags(PetModeFlags mode, bool apply)
     data << GetObjectGuid();
     data << uint32(m_petModeFlags);
     ((Player*)owner)->GetSession()->SendPacket(&data);
+}
+
+void Pet::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
+{
+    Unit* unitOwner = GetOwner();
+    Player *owner = unitOwner ? unitOwner->ToPlayer() : NULL;
+    if (!owner)
+        return Unit::UpdateSpeed(mtype, forced, ratio);         // NPC pets are usual creatures
+
+    int32 main_speed_mod  = 0;
+    float stack_bonus     = 1.0f;
+    float non_stack_bonus = 1.0f;
+
+    switch (mtype)
+    {
+        case MOVE_WALK:
+            break;
+        case MOVE_RUN:
+            if (!m_attacking && owner->HasAura(19596))   // Bestial Swiftness: prevent while following
+            {
+                AuraList const& auras = GetAurasByType(SPELL_AURA_MOD_INCREASE_SPEED);
+                for (AuraList::const_iterator it = auras.begin(); it != auras.end(); ++it)
+                    if ((*it)->GetId() != 19582)                        // exclude the aura influenced by Bestial Swiftness
+                        main_speed_mod = std::max((*it)->GetBasePoints(), main_speed_mod);
+            }
+            else
+                main_speed_mod = GetMaxPositiveAuraModifier(SPELL_AURA_MOD_INCREASE_SPEED);
+
+            stack_bonus     = GetTotalAuraMultiplier(SPELL_AURA_MOD_SPEED_ALWAYS);
+            non_stack_bonus = (100.0f + GetMaxPositiveAuraModifier(SPELL_AURA_MOD_SPEED_NOT_STACK)) / 100.0f;
+            break;
+        case MOVE_RUN_BACK:
+            return;
+        case MOVE_SWIM:
+        {
+            main_speed_mod  = GetMaxPositiveAuraModifier(SPELL_AURA_MOD_INCREASE_SWIM_SPEED);
+            break;
+        }
+        case MOVE_SWIM_BACK:
+            return;
+        default:
+            sLog.outError("Pet::UpdateSpeed: Unsupported move type (%d)", mtype);
+            return;
+    }
+
+    // Get owner current speed
+    float ownerSpeed = owner->GetSpeedRate(mtype);
+    int32 slow = owner->GetMaxNegativeAuraModifier(SPELL_AURA_MOD_DECREASE_SPEED);
+
+    // If owner is affected by speed reduction effects, do not take them into account
+    // (a dazed hunter does not affect pet's speed)
+    if (slow)
+        { ownerSpeed *= 100.0f / (100.0f + slow) ;}
+
+    float speed = std::max(non_stack_bonus, stack_bonus) * ownerSpeed;
+
+    if (main_speed_mod)
+      speed = speed * (100.0f + main_speed_mod) / 100.0f;
+
+    switch (mtype)
+    {
+        case MOVE_RUN:
+        case MOVE_SWIM:
+        {
+            // Normalize speed by 191 aura SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED if need
+            // TODO: possible affect only on MOVE_RUN
+            if (int32 normalization = GetMaxPositiveAuraModifier(SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED))
+            {
+                // Use speed from aura
+                float max_speed = normalization / baseMoveSpeed[mtype];
+                if (speed > max_speed)
+                    { speed = max_speed; }
+            }
+            break;
+        }
+        default:
+            break;
+    }
+
+    // Apply strongest slow aura mod to speed
+    slow = GetMaxNegativeAuraModifier(SPELL_AURA_MOD_DECREASE_SPEED);
+    if (slow)
+        { speed *= (100.0f + slow) / 100.0f; }
+
+    if (mtype == MOVE_RUN)
+            speed *= 1.14286f;
+
+    SetSpeedRate(mtype, speed * ratio, forced);
+}
+
+PetDatabaseStatus Pet::GetStatusFromDB(Player* owner)
+{
+    PetDatabaseStatus status = PET_DB_NO_PET;
+
+    uint32 ownerid = owner->GetGUIDLow();
+
+    QueryResult* result;
+                                      //      0   1      2      3        4      5    6           7              8        9           10    11    12       13         14       15            16      17              18        19                 20                 21              22
+    result = CharacterDatabase.PQuery("SELECT id, entry, owner, modelid, level, exp, Reactstate, loyaltypoints, loyalty, trainpoint, slot, name, renamed, curhealth, curmana, curhappiness, abdata, TeachSpelldata, savetime, resettalents_cost, resettalents_time, CreatedBySpell, PetType "
+                                      "FROM character_pet WHERE owner = %u AND (slot = %u OR slot > %u)",
+                                      ownerid, PET_SAVE_AS_CURRENT, PET_SAVE_LAST_STABLE_SLOT);
+    if (!result)
+        { return status; }
+
+    Field* fields = result->Fetch();
+
+    uint32 petentry = fields[1].GetUInt32();
+
+    if (!petentry)
+    {
+        delete result;
+        return status;
+    }
+
+    CreatureInfo const* creatureInfo = ObjectMgr::GetCreatureTemplate(petentry);
+    if (!creatureInfo)
+    {
+        delete result;
+        return status;
+    }
+
+    uint32 savedHP = fields[13].GetUInt32();
+    delete result;
+    if (savedHP > 0)
+        status = PET_DB_ALIVE;
+    else
+        status = PET_DB_DEAD;
+
+    return status;
 }

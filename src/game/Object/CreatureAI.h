@@ -52,7 +52,9 @@ enum CanCastResult
     CAST_FAIL_TOO_CLOSE         = 4,
     CAST_FAIL_POWER             = 5,
     CAST_FAIL_STATE             = 6,
-    CAST_FAIL_TARGET_AURA       = 7
+    CAST_FAIL_TARGET_AURA       = 7,
+    CAST_FAIL_NO_LOS            = 8,
+    CAST_FAIL_SILENCED          = 9
 };
 
 enum CastFlags
@@ -63,6 +65,12 @@ enum CastFlags
     CAST_NO_MELEE_IF_OOM        = 0x08,                     // Prevents creature from entering melee if out of mana or out of range
     CAST_FORCE_TARGET_SELF      = 0x10,                     // Forces the target to cast this spell on itself
     CAST_AURA_NOT_PRESENT       = 0x20,                     // Only casts the spell if the target does not have an aura from the spell
+};
+
+enum CombatMovementFlags
+{
+    CM_SCRIPT = 0x01,
+    CM_SPELL  = 0x02,
 };
 
 enum AIEventType
@@ -100,18 +108,12 @@ enum AIEventType
 class CreatureAI
 {
     public:
-        explicit CreatureAI(Creature* creature) :
-            m_creature(creature),
-            m_isCombatMovement(true),
-            m_attackDistance(0.0f),
-            m_attackAngle(0.0f)
-        {}
-
+        explicit CreatureAI(Creature* creature);
         virtual ~CreatureAI();
 
         ///== Information about AI ========================
         /**
-         * This funcion is used to display information about the AI.
+         * This function is used to display information about the AI.
          * It is called when the .npc aiinfo command is used.
          * Use this for on-the-fly debugging
          * @param reader is a ChatHandler to send messages to.
@@ -138,7 +140,7 @@ class CreatureAI
          * Called for reaction at stopping attack at no attackers or targets
          * This is called usually in Unit::SelectHostileTarget, if no more target exists
          */
-        virtual void EnterEvadeMode() {}
+        virtual void EnterEvadeMode() { m_creature->ResetPlayerDamageReq(); }
 
         /**
          * Called at reaching home after MoveTargetedHome
@@ -223,6 +225,12 @@ class CreatureAI
          */
         virtual void SpellHit(Unit* /*pCaster*/, const SpellEntry* /*pSpell*/) {}
 
+        /**
+         * Called when the current casted spell is processed
+         * @param pSpell The spell that is casted currently
+         * @param reason The spell state (see SpellCastResult enum)
+         */
+        virtual void OnSpellCastChange(const SpellEntry* /*pSpell*/, SpellCastResult /*reason*/) {}
         /**
          * Called when spell hits creature's target
          * @param pTarget Target that we hit with the spell
@@ -309,11 +317,13 @@ class CreatureAI
          * @param uiCastFlags Some flags to define how to cast, see enum CastFlags
          * @param OriginalCasterGuid the original caster of the spell if required, empty by default
          */
-        CanCastResult DoCastSpellIfCan(Unit* pTarget, uint32 uiSpell, uint32 uiCastFlags = 0, ObjectGuid OriginalCasterGuid = ObjectGuid());
+        virtual CanCastResult DoCastSpellIfCan(Unit* pTarget, uint32 uiSpell, uint32 uiCastFlags = 0, ObjectGuid OriginalCasterGuid = ObjectGuid());
 
-        /// Set combat movement (on/off), also sets UNIT_STAT_NO_COMBAT_MOVEMENT
+        /// Combat movement functions
         void SetCombatMovement(bool enable, bool stopOrStartMovement = false);
-        bool IsCombatMovement() const { return m_isCombatMovement; }
+        bool IsCombatMovement() const { return m_combatMovement != 0; }
+        uint8 GetCombatMovementFlags() const { return m_combatMovement; }
+        void SetCombatMovementFlag(uint8 flag, bool setFlag = true);
 
         ///== Event Handling ===============================
 
@@ -343,21 +353,23 @@ class CreatureAI
         virtual void ReceiveAIEvent(AIEventType /*eventType*/, Creature* /*pSender*/, Unit* /*pInvoker*/, uint32 /*miscValue*/) {}
 
         // Reset should be defined here, as it is called from out the AI ctor now
-        virtual void Reset() {}
+        virtual void Reset() { m_combatMovement = CM_SCRIPT; }
 
     protected:
         void HandleMovementOnAttackStart(Unit* victim);
+        void SetChase(bool chase);
 
         ///== Fields =======================================
 
         /// Pointer to the Creature controlled by this AI
         Creature* const m_creature;
 
-        /// Combat movement currently enabled
-        bool m_isCombatMovement;
         /// How should an enemy be chased
         float m_attackDistance;
         float m_attackAngle;
+    private:
+        /// Combat movement currently enabled
+        uint8 m_combatMovement;
 };
 
 struct SelectableAI : public FactoryHolder<CreatureAI>, public Permissible<Creature>

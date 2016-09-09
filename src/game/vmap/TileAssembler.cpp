@@ -22,15 +22,16 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
+#include <set>
+#include <iomanip>
+#include <sstream>
+#include <iomanip>
+
 #include "TileAssembler.h"
 #include "MapTree.h"
 #include "BIH.h"
 #include "VMapDefinitions.h"
 
-#include <set>
-#include <iomanip>
-#include <sstream>
-#include <iomanip>
 
 using G3D::Vector3;
 using G3D::AABox;
@@ -74,7 +75,7 @@ namespace VMAP
         // delete iCoordModelMapping;
     }
 
-    bool TileAssembler::convertWorld2()
+    bool TileAssembler::convertWorld2(const char *RAW_VMAP_MAGIC)
     {
         bool success = readMapSpawns();
         if (!success)
@@ -92,7 +93,7 @@ namespace VMAP
                 // M2 models don't have a bound set in WDT/ADT placement data, i still think they're not used for LoS at all on retail
                 if (entry->second.flags & MOD_M2)
                 {
-                    if (!calculateTransformedBound(entry->second))
+                    if (!calculateTransformedBound(entry->second, RAW_VMAP_MAGIC))
                         { break; }
                 }
                 else if (entry->second.flags & MOD_WORLDSPAWN) // WMO maps and terrain maps use different origin, so we need to adapt :/
@@ -110,9 +111,9 @@ namespace VMAP
             pTree.build(mapSpawns, BoundsTrait<ModelSpawn*>::getBounds);
 
             // ===> possibly move this code to StaticMapTree class
-            std::map<int, int> modelNodeIdx;
-            for (int i = 0; i < (int)mapSpawns.size(); ++i)
-                { modelNodeIdx.insert(pair<int, int>(mapSpawns[i]->ID, i)); }
+            std::map<uint32, uint32> modelNodeIdx;
+            for (uint32 i = 0; i < mapSpawns.size(); ++i)
+                { modelNodeIdx.insert(pair<uint32, uint32>(mapSpawns[i]->ID, i)); }
 
             // write map tree file
             std::stringstream mapfilename;
@@ -158,7 +159,7 @@ namespace VMAP
                 std::stringstream tilefilename;
                 tilefilename.fill('0');
                 tilefilename << iDestDir << "/" << std::setw(3) << map_iter->first << "_";
-                int x, y;
+                uint32 x, y;
                 StaticMapTree::unpackTileID(tile->first, x, y);
                 tilefilename << std::setw(2) << x << "_" << std::setw(2) << y << ".vmtile";
                 FILE* tilefile = fopen(tilefilename.str().c_str(), "wb");
@@ -174,7 +175,7 @@ namespace VMAP
                     const ModelSpawn& spawn2 = map_iter->second->UniqueEntries[tile->second];
                     success = success && ModelSpawn::writeToFile(tilefile, spawn2);
                     // MapTree nodes to update when loading tile:
-                    std::map<int, int>::iterator nIdx = modelNodeIdx.find(spawn2.ID);
+                    std::map<uint32, uint32>::iterator nIdx = modelNodeIdx.find(spawn2.ID);
                     if (success && fwrite(&nIdx->second, sizeof(uint32), 1, tilefile) != 1) { success = false; }
                 }
                 fclose(tilefile);
@@ -183,14 +184,14 @@ namespace VMAP
         }
 
         // add an object models, listed in temp_gameobject_models file
-        exportGameobjectModels();
+        exportGameobjectModels(RAW_VMAP_MAGIC);
 
         // export objects
         std::cout << "\nConverting Model Files" << std::endl;
         for (std::set<std::string>::iterator mfile = spawnedModelFiles.begin(); mfile != spawnedModelFiles.end(); ++mfile)
         {
             std::cout << "Converting " << *mfile << std::endl;
-            if (!convertRawFile(*mfile))
+            if (!convertRawFile(*mfile, RAW_VMAP_MAGIC))
             {
                 std::cout << "error converting " << *mfile << std::endl;
                 success = false;
@@ -235,7 +236,7 @@ namespace VMAP
             MapData::iterator map_iter = mapData.find(mapID);
             if (map_iter == mapData.end())
             {
-                printf("spawning Map %u\n", mapID);
+                printf("spawning Map %d\n", mapID);
                 mapData[mapID] = current = new MapSpawns();
             }
             else { current = (*map_iter).second; }
@@ -247,7 +248,7 @@ namespace VMAP
         return success;
     }
 
-    bool TileAssembler::calculateTransformedBound(ModelSpawn& spawn)
+    bool TileAssembler::calculateTransformedBound(ModelSpawn& spawn, const char *RAW_VMAP_MAGIC)
     {
         std::string modelFilename = iSrcDir + "/" + spawn.name;
         ModelPosition modelPosition;
@@ -256,7 +257,7 @@ namespace VMAP
         modelPosition.init();
 
         WorldModel_Raw raw_model;
-        if (!raw_model.Read(modelFilename.c_str()))
+        if (!raw_model.Read(modelFilename.c_str(), RAW_VMAP_MAGIC))
             { return false; }
 
         uint32 groups = raw_model.groupsArray.size();
@@ -299,7 +300,7 @@ namespace VMAP
         short type;
     };
     //=================================================================
-    bool TileAssembler::convertRawFile(const std::string& pModelFilename)
+    bool TileAssembler::convertRawFile(const std::string& pModelFilename, const char *RAW_VMAP_MAGIC)
     {
         bool success = true;
         std::string filename = iSrcDir;
@@ -308,7 +309,7 @@ namespace VMAP
         filename.append(pModelFilename);
 
         WorldModel_Raw raw_model;
-        if (!raw_model.Read(filename.c_str()))
+        if (!raw_model.Read(filename.c_str(), RAW_VMAP_MAGIC))
             { return false; }
 
         // write WorldModel
@@ -336,7 +337,7 @@ namespace VMAP
         return success;
     }
 
-    void TileAssembler::exportGameobjectModels()
+    void TileAssembler::exportGameobjectModels(const char *RAW_VMAP_MAGIC)
     {
         FILE* model_list = fopen((iSrcDir + "/" + GAMEOBJECT_MODELS).c_str(), "rb");
         if (!model_list)
@@ -355,7 +356,8 @@ namespace VMAP
         {
             if (fread(&displayId, sizeof(uint32), 1, model_list) <= 0)
             {
-                std::cout << "\nFile '" << GAMEOBJECT_MODELS << "' seems to be corrupted" << std::endl;
+                if (!feof(model_list))
+                    std::cout << "\nFile '" << GAMEOBJECT_MODELS << "' seems to be corrupted" << std::endl;
                 break;
             }
             if (fread(&name_length, sizeof(uint32), 1, model_list) <= 0)
@@ -378,7 +380,7 @@ namespace VMAP
             std::string model_name(buff, name_length);
 
             WorldModel_Raw raw_model;
-            if (!raw_model.Read((iSrcDir + "/" + model_name).c_str()))
+            if (!raw_model.Read((iSrcDir + "/" + model_name).c_str(), RAW_VMAP_MAGIC))
                 { continue; }
 
             spawnedModelFiles.insert(model_name);
@@ -518,7 +520,7 @@ namespace VMAP
         delete liquid;
     }
 
-    bool WorldModel_Raw::Read(const char* path)
+    bool WorldModel_Raw::Read(const char* path, const char *RAW_VMAP_MAGIC)
     {
         FILE* rf = fopen(path, "rb");
         if (!rf)

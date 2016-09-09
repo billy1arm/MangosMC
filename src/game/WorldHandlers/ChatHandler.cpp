@@ -271,7 +271,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             }
             else
 #endif
-            GetPlayer()->Whisper(msg, lang, player->GetObjectGuid());
+                GetPlayer()->Whisper(msg, lang, player->GetObjectGuid());
         } break;
 
         case CHAT_MSG_PARTY:
@@ -630,10 +630,10 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
                         _player->GetPlayerbotMgr()->HandleCommand(type, msg);
                     }
                     sRandomPlayerbotMgr.HandleCommand(type, msg, *_player);
-                    chn->Say(_player, msg.c_str(), lang);
+#endif /* ENABLE_PLAYERBOTS */
+                    chn->Say(_player, msg.c_str(), lang); 
                 }
             }
-#endif
 
         } break;
 

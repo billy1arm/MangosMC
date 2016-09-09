@@ -111,6 +111,7 @@ enum BattleGroundMarksCount
  */
 enum BattleGroundTimeIntervals
 {
+    CHECK_PLAYER_POSITION_INVERVAL  = 1000,                 // ms
     RESURRECTION_INTERVAL           = 30000,                // ms
     INVITATION_REMIND_TIME          = 60000,                // ms
     INVITE_ACCEPT_WAIT_TIME         = 80000,                // ms
@@ -470,6 +471,12 @@ class BattleGround
         /**
          * @brief
          *
+         * @return Team
+         */
+        virtual Team GetPrematureWinner();
+        /**
+         * @brief
+         *
          * @return uint32
          */
         uint32 GetBattlemasterEntry() const;
@@ -734,6 +741,9 @@ class BattleGround
             O = m_TeamStartLocO[idx];
         }
 
+        void SetStartMaxDist(float startMaxDist) { m_startMaxDist = startMaxDist; }
+        float GetStartMaxDist() const { return m_startMaxDist; }
+
         /* Packet Transfer */
         // method that should fill worldpacket with actual world states (not yet implemented for all battlegrounds!)
         /**
@@ -981,7 +991,7 @@ class BattleGround
          * @param
          * @param uint32
          */
-        virtual void HandleAreaTrigger(Player* /*Source*/, uint32 /*Trigger*/) {}
+        virtual bool HandleAreaTrigger(Player* /*Source*/, uint32 /*Trigger*/) { return false;  }
         // must be implemented in BG subclass if need AND call base class generic code
         /**
          * @brief
@@ -1040,9 +1050,8 @@ class BattleGround
          * @brief
          *
          * @param player
-         * @param plr_guid
          */
-        void EventPlayerLoggedIn(Player* player, ObjectGuid plr_guid);
+        void EventPlayerLoggedIn(Player* player);
         /**
          * @brief
          *
@@ -1289,6 +1298,7 @@ class BattleGround
         BattleGroundStatus m_Status; /**< TODO */
         uint32 m_ClientInstanceID;                          /**< the instance-id which is sent to the client and without any other internal use */
         uint32 m_StartTime; /**< TODO */
+        uint32 m_validStartPositionTimer;
         int32 m_EndTime;                                    /**< it is set to 120000 when bg is ending and it decreases itself */
         BattleGroundBracketId m_BracketId; /**< TODO */
         bool   m_InBGFreeSlotQueue;                         /**< used to make sure that BG is only once inserted into the BattleGroundMgr.BGFreeSlotQueue[bgTypeId] deque */
@@ -1329,6 +1339,7 @@ class BattleGround
         /* Start location */
         uint32 m_MapId; /**< TODO */
         BattleGroundMap* m_Map; /**< TODO */
+        float m_startMaxDist;
         float m_TeamStartLocX[PVP_TEAM_COUNT]; /**< TODO */
         float m_TeamStartLocY[PVP_TEAM_COUNT]; /**< TODO */
         float m_TeamStartLocZ[PVP_TEAM_COUNT]; /**< TODO */

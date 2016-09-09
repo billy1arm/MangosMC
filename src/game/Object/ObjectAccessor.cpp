@@ -43,7 +43,10 @@
 INSTANTIATE_SINGLETON_2(ObjectAccessor, CLASS_LOCK);
 INSTANTIATE_CLASS_MUTEX(ObjectAccessor, ACE_Thread_Mutex);
 
-ObjectAccessor::ObjectAccessor() {}
+ObjectAccessor::ObjectAccessor() : i_playerGuard(), i_corpseGuard()
+{
+}
+
 ObjectAccessor::~ObjectAccessor()
 {
     for (Player2CorpsesMapType::const_iterator itr = i_player2corpse.begin(); itr != i_player2corpse.end(); ++itr)
@@ -93,22 +96,26 @@ Player* ObjectAccessor::FindPlayer(ObjectGuid guid, bool inWorld /*= true*/)
 
 Player* ObjectAccessor::FindPlayerByName(const char* name)
 {
-    HashMapHolder<Player>::ReadGuard g(HashMapHolder<Player>::GetLock());
+    ACE_READ_GUARD_RETURN(HashMapHolder<Player>::LockType, guard, HashMapHolder<Player>::GetLock(), NULL)
     HashMapHolder<Player>::MapType& m = sObjectAccessor.GetPlayers();
     for (HashMapHolder<Player>::MapType::iterator iter = m.begin(); iter != m.end(); ++iter)
         if (iter->second->IsInWorld() && (::strcmp(name, iter->second->GetName()) == 0))
-            { return iter->second; }
-
+              { return iter->second; }
     return NULL;
 }
 
 void
 ObjectAccessor::SaveAllPlayers()
 {
-    HashMapHolder<Player>::ReadGuard g(HashMapHolder<Player>::GetLock());
-    HashMapHolder<Player>::MapType& m = sObjectAccessor.GetPlayers();
-    for (HashMapHolder<Player>::MapType::iterator itr = m.begin(); itr != m.end(); ++itr)
-        { itr->second->SaveToDB(); }
+   SessionMap const& smap = sWorld.GetAllSessions();
+   SessionMap::const_iterator iter;
+   for (iter = smap.begin(); iter != smap.end(); ++iter){
+       if (Player* player = iter->second->GetPlayer()){
+           if (player->IsInWorld()){
+               player->SaveToDB();
+           }
+       }
+   }
 }
 
 void ObjectAccessor::KickPlayer(ObjectGuid guid)
@@ -124,14 +131,14 @@ void ObjectAccessor::KickPlayer(ObjectGuid guid)
 Corpse*
 ObjectAccessor::GetCorpseForPlayerGUID(ObjectGuid guid)
 {
-    Guard guard(i_corpseGuard);
+    ACE_GUARD_RETURN(LockType, guard, i_corpseGuard, NULL)
 
     Player2CorpsesMapType::iterator iter = i_player2corpse.find(guid);
+
     if (iter == i_player2corpse.end())
         { return NULL; }
 
     MANGOS_ASSERT(iter->second->GetType() != CORPSE_BONES);
-
     return iter->second;
 }
 
@@ -140,7 +147,8 @@ ObjectAccessor::RemoveCorpse(Corpse* corpse)
 {
     MANGOS_ASSERT(corpse && corpse->GetType() != CORPSE_BONES);
 
-    Guard guard(i_corpseGuard);
+    ACE_GUARD(LockType, guard, i_corpseGuard)
+
     Player2CorpsesMapType::iterator iter = i_player2corpse.find(corpse->GetOwnerGuid());
     if (iter == i_player2corpse.end())
         { return; }
@@ -160,7 +168,8 @@ ObjectAccessor::AddCorpse(Corpse* corpse)
 {
     MANGOS_ASSERT(corpse && corpse->GetType() != CORPSE_BONES);
 
-    Guard guard(i_corpseGuard);
+    ACE_GUARD(LockType, guard, i_corpseGuard)
+
     MANGOS_ASSERT(i_player2corpse.find(corpse->GetOwnerGuid()) == i_player2corpse.end());
     i_player2corpse[corpse->GetOwnerGuid()] = corpse;
 
@@ -174,23 +183,24 @@ ObjectAccessor::AddCorpse(Corpse* corpse)
 void
 ObjectAccessor::AddCorpsesToGrid(GridPair const& gridpair, GridType& grid, Map* map)
 {
-    Guard guard(i_corpseGuard);
+    ACE_GUARD(LockType, guard, i_corpseGuard)
+
     for (Player2CorpsesMapType::iterator iter = i_player2corpse.begin(); iter != i_player2corpse.end(); ++iter)
-        if (iter->second->GetGrid() == gridpair)
-        {
-            // verify, if the corpse in our instance (add only corpses which are)
-            if (map->Instanceable())
-            {
-                if (iter->second->GetInstanceId() == map->GetInstanceId())
-                {
-                    grid.AddWorldObject(iter->second);
-                }
-            }
-            else
-            {
-                grid.AddWorldObject(iter->second);
-            }
-        }
+      if (iter->second->GetGrid() == gridpair)
+      {
+          // verify, if the corpse in our instance (add only corpses which are)
+          if (map->Instanceable())
+          {
+              if (iter->second->GetInstanceId() == map->GetInstanceId())
+              {
+                  grid.AddWorldObject(iter->second);
+              }
+          }
+          else
+          {
+              grid.AddWorldObject(iter->second);
+          }
+      }
 }
 
 Corpse*
@@ -277,7 +287,7 @@ void ObjectAccessor::RemoveOldCorpses()
 /// Define the static member of HashMapHolder
 
 template <class T> typename HashMapHolder<T>::MapType HashMapHolder<T>::m_objectMap;
-template <class T> ACE_RW_Thread_Mutex HashMapHolder<T>::i_lock;
+template <class T> typename HashMapHolder<T>::LockType HashMapHolder<T>::i_lock;
 
 /// Global definitions for the hashmap storage
 

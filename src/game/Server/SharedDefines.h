@@ -27,7 +27,6 @@
 
 #include "Platform/Define.h"
 #include <cassert>
-#include "SharedCoreDefine.h"
 
 #ifndef MANGOS
 #define MANGOS
@@ -332,7 +331,7 @@ enum SpellAttributesEx
     SPELL_ATTR_EX_UNAFFECTED_BY_SCHOOL_IMMUNE   = 0x00010000,            // 16 unaffected by school immunity
     SPELL_ATTR_EX_UNK17                         = 0x00020000,            // 17 for auras SPELL_AURA_TRACK_CREATURES, SPELL_AURA_TRACK_RESOURCES and SPELL_AURA_TRACK_STEALTHED select non-stacking tracking spells
     SPELL_ATTR_EX_UNK18                         = 0x00040000,            // 18
-    SPELL_ATTR_EX_UNK19                         = 0x00080000,            // 19
+    SPELL_ATTR_EX_CANT_TARGET_SELF              = 0x00080000,            // 19 spells that exclude the caster
     SPELL_ATTR_EX_REQ_TARGET_COMBO_POINTS       = 0x00100000,            // 20 Req combo points on target
     SPELL_ATTR_EX_UNK21                         = 0x00200000,            // 21
     SPELL_ATTR_EX_REQ_COMBO_POINTS              = 0x00400000,            // 22 Use combo points (in 4.x not required combo point target selected)
@@ -413,7 +412,7 @@ enum SpellAttributesEx3
     SPELL_ATTR_EX3_UNK25                        = 0x02000000,            // 25 no cause spell pushback ?
     SPELL_ATTR_EX3_UNK26                        = 0x04000000,            // 26
     SPELL_ATTR_EX3_UNK27                        = 0x08000000,            // 27
-    SPELL_ATTR_EX3_UNK28                        = 0x10000000,            // 28
+    SPELL_ATTR_EX3_UNK28                        = 0x10000000,            // 28 always cast ok ? (requires more research)
     SPELL_ATTR_EX3_UNK29                        = 0x20000000,            // 29
     SPELL_ATTR_EX3_UNK30                        = 0x40000000,            // 30
     SPELL_ATTR_EX3_UNK31                        = 0x80000000             // 31
@@ -429,9 +428,9 @@ enum SpellAttributesEx4
     SPELL_ATTR_EX4_UNK5                         = 0x00000020,            // 5
     SPELL_ATTR_EX4_NOT_STEALABLE                = 0x00000040,            // 6 although such auras might be dispellable, they can not be stolen
     SPELL_ATTR_EX4_UNK7                         = 0x00000080,            // 7
-    SPELL_ATTR_EX4_STACK_DOT_MODIFIER           = 0x00000100,            // 8
+    SPELL_ATTR_EX4_STACK_DOT_MODIFIER           = 0x00000100,            // 8 no effect on non DoTs?
     SPELL_ATTR_EX4_UNK9                         = 0x00000200,            // 9
-    SPELL_ATTR_EX4_SPELL_VS_EXTEND_COST         = 0x00000400,            // 10
+    SPELL_ATTR_EX4_SPELL_VS_EXTEND_COST         = 0x00000400,            // 10 Rogue Shiv have this flag
     SPELL_ATTR_EX4_UNK11                        = 0x00000800,            // 11
     SPELL_ATTR_EX4_UNK12                        = 0x00001000,            // 12
     SPELL_ATTR_EX4_UNK13                        = 0x00002000,            // 13
@@ -1064,6 +1063,8 @@ enum SpellRangeIndex
     SPELL_RANGE_IDX_SELF_ONLY = 1,
     /// 5.5 (but dynamic), seems to indicate melee range
     SPELL_RANGE_IDX_COMBAT    = 2,
+    /// 20 short range
+    SPELL_RANGE_IDX_SHORT     = 3,
     /// 500000 (anywhere)
     SPELL_RANGE_IDX_ANYWHERE  = 13,
 };
@@ -1134,7 +1135,8 @@ enum GameObjectDynamicLowFlags
 {
     GO_DYNFLAG_LO_ACTIVATE          = 0x01,                 // enables interaction with GO
     GO_DYNFLAG_LO_ANIMATE           = 0x02,                 // possibly more distinct animation of GO
-    GO_DYNFLAG_LO_NO_INTERACT       = 0x04                  // appears to disable interaction (not fully verified)
+    GO_DYNFLAG_LO_NO_INTERACT       = 0x04,                 // appears to disable interaction (not fully verified)
+    GO_DYNFLAG_LO_SPARKLE           = 0x08                  // not fully verified
 };
 
 enum TextEmotes
@@ -2506,7 +2508,7 @@ enum TradeStatus
     TRADE_STATUS_NO_TARGET      = 6,
     TRADE_STATUS_BACK_TO_TRADE  = 7,
     TRADE_STATUS_TRADE_COMPLETE = 8,
-    // 9?
+    TRADE_STATUS_TRADE_REJECTED = 9,
     TRADE_STATUS_TARGET_TO_FAR  = 10,
     TRADE_STATUS_WRONG_FACTION  = 11,
     TRADE_STATUS_CLOSE_WINDOW   = 12,
@@ -2519,7 +2521,8 @@ enum TradeStatus
     TRADE_STATUS_YOU_LOGOUT     = 19,
     TRADE_STATUS_TARGET_LOGOUT  = 20,
     TRADE_STATUS_TRIAL_ACCOUNT  = 21,                       // Trial accounts can not perform that action
-    TRADE_STATUS_ONLY_CONJURED  = 22                        // You can only trade conjured items... (cross realm BG related).
+    TRADE_STATUS_WRONG_REALM    = 22,                       // You can only trade conjured items... (cross realm BG related).
+    TRADE_STATUS_NOT_ON_TAPLIST = 23
 };
 
 enum WorldStateType
@@ -2549,15 +2552,17 @@ enum AreaLockStatus
 {
     AREA_LOCKSTATUS_OK                          = 0,
     AREA_LOCKSTATUS_UNKNOWN_ERROR               = 1,
-    AREA_LOCKSTATUS_TOO_LOW_LEVEL               = 2,
-    AREA_LOCKSTATUS_TOO_HIGH_LEVEL              = 3,
-    AREA_LOCKSTATUS_RAID_LOCKED                 = 4,
-    AREA_LOCKSTATUS_QUEST_NOT_COMPLETED         = 5,
-    AREA_LOCKSTATUS_MISSING_ITEM                = 6,
-    AREA_LOCKSTATUS_ZONE_IN_COMBAT              = 7,
-    AREA_LOCKSTATUS_INSTANCE_IS_FULL            = 8,
-    AREA_LOCKSTATUS_NOT_ALLOWED                 = 9,
-    AREA_LOCKSTATUS_HAS_BIND                    = 10,
+    AREA_LOCKSTATUS_LEVEL_NOT_EQUAL             = 2,
+    AREA_LOCKSTATUS_LEVEL_TOO_LOW               = 3,
+    AREA_LOCKSTATUS_LEVEL_TOO_HIGH              = 4,
+    AREA_LOCKSTATUS_RAID_LOCKED                 = 5,
+    AREA_LOCKSTATUS_QUEST_NOT_COMPLETED         = 6,
+    AREA_LOCKSTATUS_MISSING_ITEM                = 7,
+    AREA_LOCKSTATUS_ZONE_IN_COMBAT              = 8,
+    AREA_LOCKSTATUS_INSTANCE_IS_FULL            = 9,
+    AREA_LOCKSTATUS_NOT_ALLOWED                 = 10,
+    AREA_LOCKSTATUS_HAS_BIND                    = 11,
+    AREA_LOCKSTATUS_WRONG_TEAM                  = 12,
 };
 
 enum TrackedAuraType

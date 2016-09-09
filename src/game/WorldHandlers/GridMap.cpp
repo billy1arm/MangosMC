@@ -37,7 +37,7 @@
 #include "Util.h"
 
 char const* MAP_MAGIC         = "MAPS";
-char const* MAP_VERSION_MAGIC = "z1.3";
+char const* MAP_VERSION_MAGIC = "z1.4";
 char const* MAP_AREA_MAGIC    = "AREA";
 char const* MAP_HEIGHT_MAGIC  = "MHGT";
 char const* MAP_LIQUID_MAGIC  = "MLIQ";
@@ -90,7 +90,8 @@ bool GridMap::loadData(char* filename)
 
     fread(&header, sizeof(header), 1, in);
     if (header.mapMagic     == *((uint32 const*)(MAP_MAGIC)) &&
-            header.versionMagic == *((uint32 const*)(MAP_VERSION_MAGIC)))
+            header.versionMagic == *((uint32 const*)(MAP_VERSION_MAGIC)) &&
+            IsAcceptableClientBuild(header.buildMagic))
     {
         // loadup area data
         if (header.areaMapOffset && !loadAreaData(in, header.areaMapOffset, header.areaMapSize))
@@ -231,7 +232,7 @@ bool GridMap::loadHeightData(FILE* in, uint32 offset, uint32 /*size*/)
     return true;
 }
 
-bool GridMap::loadHolesData(FILE* in, uint32 offset, uint32 size)
+bool GridMap::loadHolesData(FILE* in, uint32 offset, uint32 /*size*/)
 {
     if (fseek(in, offset, SEEK_SET) != 0)
         return false;
@@ -694,7 +695,8 @@ bool GridMap::ExistMap(uint32 mapid, int gx, int gy)
         return false;
     }
     if (header.mapMagic     != *((uint32 const*)(MAP_MAGIC)) ||
-        header.versionMagic != *((uint32 const*)(MAP_VERSION_MAGIC)))
+            header.versionMagic != *((uint32 const*)(MAP_VERSION_MAGIC)) ||
+            !IsAcceptableClientBuild(header.buildMagic))
     {
         sLog.outError("Map file '%s' is non-compatible version created with a different map-extractor version.", tmp);
         delete[] tmp;
@@ -728,7 +730,7 @@ bool GridMap::ExistVMap(uint32 mapid, int gx, int gy)
 }
 
 //////////////////////////////////////////////////////////////////////////
-TerrainInfo::TerrainInfo(uint32 mapid) : m_mapId(mapid)
+TerrainInfo::TerrainInfo(uint32 mapid) : m_mapId(mapid), m_refMutex(), m_mutex()
 {
     for (int k = 0; k < MAX_NUMBER_OF_GRIDS; ++k)
     {
@@ -829,7 +831,7 @@ int TerrainInfo::RefGrid(const uint32& x, const uint32& y)
     MANGOS_ASSERT(x < MAX_NUMBER_OF_GRIDS);
     MANGOS_ASSERT(y < MAX_NUMBER_OF_GRIDS);
 
-    LOCK_GUARD _lock(m_refMutex);
+    ACE_GUARD_RETURN(LOCK_TYPE, _lock, m_refMutex, -1)
     return (m_GridRef[x][y] += 1);
 }
 
@@ -840,7 +842,7 @@ int TerrainInfo::UnrefGrid(const uint32& x, const uint32& y)
 
     int16& iRef = m_GridRef[x][y];
 
-    LOCK_GUARD _lock(m_refMutex);
+    ACE_GUARD_RETURN(LOCK_TYPE, _lock, m_refMutex, -1)
     if (iRef > 0)
         { return (iRef -= 1); }
 
@@ -1073,6 +1075,23 @@ bool TerrainInfo::IsInWater(float x, float y, float pZ, GridMapLiquidData* data)
     return false;
 }
 
+// check if creature is in water and have enough space to swim
+bool TerrainInfo::IsSwimmable(float x, float y, float pZ, float radius /*= 1.5f*/, GridMapLiquidData* data /*= 0*/) const
+{
+    // Check surface in x, y point for liquid
+    if (const_cast<TerrainInfo*>(this)->GetGrid(x, y))
+    {
+        GridMapLiquidData liquid_status;
+        GridMapLiquidData* liquid_ptr = data ? data : &liquid_status;
+        if (getLiquidStatus(x, y, pZ, MAP_ALL_LIQUIDS, liquid_ptr))
+        {
+            if (liquid_ptr->level - liquid_ptr->depth_level > radius) // is unit have enough space to swim
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TerrainInfo::IsUnderWater(float x, float y, float z) const
 {
     if (const_cast<TerrainInfo*>(this)->GetGrid(x, y))
@@ -1132,7 +1151,7 @@ GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y)
     // double checked lock pattern
     if (!m_GridMaps[x][y])
     {
-        LOCK_GUARD lock(m_mutex);
+        ACE_GUARD_RETURN(LOCK_TYPE, lock, m_mutex, NULL)
 
         if (!m_GridMaps[x][y])
         {
@@ -1206,7 +1225,7 @@ float TerrainInfo::GetWaterLevel(float x, float y, float z, float* pGround /*= N
 INSTANTIATE_SINGLETON_2(TerrainManager, CLASS_LOCK);
 INSTANTIATE_CLASS_MUTEX(TerrainManager, ACE_Thread_Mutex);
 
-TerrainManager::TerrainManager()
+TerrainManager::TerrainManager() : m_mutex()
 {
 }
 
@@ -1218,7 +1237,7 @@ TerrainManager::~TerrainManager()
 
 TerrainInfo* TerrainManager::LoadTerrain(const uint32 mapId)
 {
-    Guard _guard(*this);
+    ACE_GUARD_RETURN(LOCK_TYPE, _guard, m_mutex, NULL)
 
     TerrainInfo* ptr = NULL;
     TerrainDataMap::const_iterator iter = i_TerrainMap.find(mapId);
@@ -1238,7 +1257,7 @@ void TerrainManager::UnloadTerrain(const uint32 mapId)
     if (sWorld.getConfig(CONFIG_BOOL_GRID_UNLOAD) == 0)
         { return; }
 
-    Guard _guard(*this);
+    ACE_GUARD(LOCK_TYPE, _guard, m_mutex)
 
     TerrainDataMap::iterator iter = i_TerrainMap.find(mapId);
     if (iter != i_TerrainMap.end())

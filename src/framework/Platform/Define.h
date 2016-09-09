@@ -66,7 +66,11 @@ typedef ACE_SHLIB_HANDLE MANGOS_LIBRARY_HANDLE;
 #else // PLATFORM != PLATFORM_WINDOWS
 #  define MANGOS_EXPORT export
 #  if defined(__APPLE_CC__) && defined(BIG_ENDIAN)
-#    define MANGOS_IMPORT __attribute__ ((longcall))
+#    if (defined(__ppc__) || defined(__powerpc__))
+#      define MANGOS_IMPORT __attribute__ ((longcall))
+#    else
+#      define MANGOS_IMPORT
+#    endif
 #  elif defined(__x86_64__)
 #    define MANGOS_IMPORT
 #  else
@@ -169,6 +173,7 @@ typedef uint32      DWORD;
 #define CONCAT1(x, y) x##y
 #define STATIC_ASSERT_WORKAROUND(expr, msg) typedef char CONCAT(static_assert_failed_at_line_, __LINE__) [(expr) ? 1 : -1]
 
+#ifndef COMPILER_HAS_CPP11_SUPPORT
 #if COMPILER == COMPILER_GNU
 #  if !defined(__GXX_EXPERIMENTAL_CXX0X__) || (__GNUC__ < 4) || (__GNUC__ == 4) && (__GNUC_MINOR__ < 7)
 #    define override
@@ -183,6 +188,7 @@ typedef uint32      DWORD;
 #  if _MSC_VER < 1600
 #    define static_assert(a, b) STATIC_ASSERT_WORKAROUND(a, b)
 #  endif
+#endif
 #endif
 
 /**

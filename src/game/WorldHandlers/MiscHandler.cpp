@@ -51,7 +51,7 @@
 #include "LuaEngine.h"
 #endif /* ENABLE_ELUNA */
 
-void WorldSession::HandleRepopRequestOpcode(WorldPacket& recv_data)
+void WorldSession::HandleRepopRequestOpcode(WorldPacket& /*recv_data*/)
 {
     DEBUG_LOG("WORLD: Received opcode CMSG_REPOP_REQUEST");
 
@@ -430,6 +430,12 @@ void WorldSession::HandleSetSelectionOpcode(WorldPacket& recv_data)
 
     _player->SetSelectionGuid(guid);
 
+    if (guid.IsEmpty())     // TODO this is probably a wrong place for such action, so it's a "hacky" or "wrong" fix
+    {
+        _player->InterruptSpell(CURRENT_AUTOREPEAT_SPELL, false);
+        return;
+    }
+
     // update reputation list if need
     Unit* unit = ObjectAccessor::GetUnit(*_player, guid);   // can select group members at diff maps
     if (!unit)
@@ -448,7 +454,7 @@ void WorldSession::HandleStandStateChangeOpcode(WorldPacket& recv_data)
     _player->SetStandState(animstate);
 }
 
-void WorldSession::HandleFriendListOpcode(WorldPacket& recv_data)
+void WorldSession::HandleFriendListOpcode(WorldPacket& /*recv_data*/)
 {
     DEBUG_LOG("WORLD: Received opcode CMSG_FRIEND_LIST");
     _player->GetSocial()->SendFriendList();
@@ -742,13 +748,13 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPacket& recv_data)
     {
         // set resting flag we are in the inn
         if (player->GetRestType() != REST_TYPE_IN_CITY)
-            { player->SetRestType(REST_TYPE_IN_TAVERN, Trigger_ID); }
+            player->SetRestType(REST_TYPE_IN_TAVERN, Trigger_ID);
         return;
     }
 
     if (BattleGround* bg = player->GetBattleGround())
     {
-        bg->HandleAreaTrigger(player, Trigger_ID);
+        if (bg->HandleAreaTrigger(player, Trigger_ID))
         return;
     }
     else if (OutdoorPvP* outdoorPvP = sOutdoorPvPMgr.GetScript(player->GetCachedZoneId()))
@@ -769,7 +775,7 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPacket& recv_data)
     // ghost resurrected at enter attempt to dungeon with corpse (including fail enter cases)
     if (!player->IsAlive() && targetMapEntry->IsDungeon())
     {
-        int32 corpseMapId = 0;
+        uint32 corpseMapId = 0; // was planned to be negative as "incorrect" id? anyway map 0 is not instanceable
         if (Corpse* corpse = player->GetCorpse())
             { corpseMapId = corpse->GetMapId(); }
 
@@ -811,8 +817,16 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPacket& recv_data)
         player->SpawnCorpseBones();
     }
 
-    // teleport player (trigger requirement will be checked on TeleportTo)
-    player->TeleportTo(at->target_mapId, at->target_X, at->target_Y, at->target_Z, at->target_Orientation, TELE_TO_NOT_LEAVE_TRANSPORT, at);
+    uint32 miscRequirement = 0;
+    AreaLockStatus lockStatus = player->GetAreaTriggerLockStatus(at, miscRequirement);
+    if (lockStatus != AREA_LOCKSTATUS_OK)
+    {
+        player->SendTransferAbortedByLockStatus(targetMapEntry, lockStatus, miscRequirement);
+        return;
+    }
+
+    // teleport player
+    player->TeleportTo(at->target_mapId, at->target_X, at->target_Y, at->target_Z, at->target_Orientation, TELE_TO_NOT_LEAVE_TRANSPORT, true);
 }
 
 void WorldSession::HandleUpdateAccountData(WorldPacket& recv_data)
@@ -874,29 +888,6 @@ void WorldSession::HandleCompleteCinematic(WorldPacket& /*recv_data*/)
 void WorldSession::HandleNextCinematicCamera(WorldPacket& /*recv_data*/)
 {
     DEBUG_LOG("WORLD: Received opcode CMSG_NEXT_CINEMATIC_CAMERA");
-}
-
-void WorldSession::HandleMoveTimeSkippedOpcode(WorldPacket& recv_data)
-{
-    /*  WorldSession::Update( WorldTimer::getMSTime() );*/
-    DEBUG_LOG("WORLD: Received opcode CMSG_MOVE_TIME_SKIPPED");
-
-    recv_data >> Unused<uint64>();
-    recv_data >> Unused<uint32>();
-
-    /*
-    ObjectGuid guid;
-    uint32 time_skipped;
-    recv_data >> guid;
-    recv_data >> time_skipped;
-    DEBUG_LOG("WORLD: Received opcode CMSG_MOVE_TIME_SKIPPED");
-
-    /// TODO
-    must be need use in mangos
-    We substract server Lags to move time ( AntiLags )
-    for exmaple
-    GetPlayer()->ModifyLastMoveTime( -int32(time_skipped) );
-    */
 }
 
 void WorldSession::HandleFeatherFallAck(WorldPacket& recv_data)
@@ -985,15 +976,18 @@ void WorldSession::HandleInspectOpcode(WorldPacket& recv_data)
     recv_data >> guid;
     DEBUG_LOG("Inspected guid is %s", guid.GetString().c_str());
 
-    _player->SetSelectionGuid(guid);
-
     Player* plr = sObjectMgr.GetPlayer(guid);
-    if (!plr)                                               // wrong player
-        { return; }
+    if (plr && _player->IsFriendlyTo(plr) && _player->IsWithinDistInMap(plr, TRADE_DISTANCE, false))  // why not 3D check?
+    {
+        _player->SetSelectionGuid(guid);
 
-    WorldPacket data(SMSG_INSPECT, 8);
-    data << ObjectGuid(guid);
-    SendPacket(&data);
+        WorldPacket data(SMSG_INSPECT, 8);
+        data << ObjectGuid(guid);
+        SendPacket(&data);
+    }
+    else
+        { DEBUG_LOG("%s not found!", guid.GetString().c_str()); }
+
 }
 
 void WorldSession::HandleInspectHonorStatsOpcode(WorldPacket& recv_data)
@@ -1002,7 +996,7 @@ void WorldSession::HandleInspectHonorStatsOpcode(WorldPacket& recv_data)
     recv_data >> guid;
 
     Player* pl = sObjectMgr.GetPlayer(guid);
-    if (pl)
+    if (pl && _player->IsFriendlyTo(pl) && _player->IsWithinDistInMap(pl, TRADE_DISTANCE, false))
     {
         WorldPacket data(MSG_INSPECT_HONOR_STATS, (8 + 1 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 1));
         data << guid;                                       // player guid

@@ -37,6 +37,7 @@
 #include "Language.h"
 #include "ScriptMgr.h"
 #include "World.h"
+#include "DisableMgr.h"
 
 void WorldSession::HandleBattlemasterHelloOpcode(WorldPacket& recv_data)
 {
@@ -60,6 +61,12 @@ void WorldSession::HandleBattlemasterHelloOpcode(WorldPacket& recv_data)
 
     if (bgTypeId == BATTLEGROUND_TYPE_NONE)
         { return; }
+
+    if (DisableMgr::IsDisabledFor(DISABLE_TYPE_BATTLEGROUND, bgTypeId))
+    {
+        SendNotification(LANG_BG_IS_DISABLED);
+        return;
+    }
 
     if (!_player->GetBGAccessByLevel(bgTypeId))
     {

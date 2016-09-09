@@ -229,6 +229,8 @@ BattleGround::BattleGround()
     m_MapId             = 0;
     m_Map               = NULL;
 
+    m_validStartPositionTimer              = 0;
+
     m_TeamStartLocX[TEAM_INDEX_ALLIANCE]   = 0;
     m_TeamStartLocX[TEAM_INDEX_HORDE]      = 0;
 
@@ -350,14 +352,7 @@ void BattleGround::Update(uint32 diff)
         }
         else if (m_PrematureCountDownTimer < diff)
         {
-            // time's up!
-            Team winner = TEAM_NONE;
-            if (GetPlayersCountByTeam(ALLIANCE) >= GetMinPlayersPerTeam())
-                { winner = ALLIANCE; }
-            else if (GetPlayersCountByTeam(HORDE) >= GetMinPlayersPerTeam())
-                { winner = HORDE; }
-
-            EndBattleGround(winner);
+            EndBattleGround(GetPrematureWinner());
             m_PrematureCountDown = false;
         }
         else if (!sBattleGroundMgr.isTesting())
@@ -387,6 +382,29 @@ void BattleGround::Update(uint32 diff)
 
     if (GetStatus() == STATUS_WAIT_JOIN && GetPlayersSize())
     {
+        float maxDist = GetStartMaxDist();
+        if (maxDist > 0.0f)
+        {
+            if (m_validStartPositionTimer < diff)
+            {
+                for (BattleGroundPlayerMap::const_iterator itr = GetPlayers().begin(); itr != GetPlayers().end(); ++itr)
+                {
+                    if (Player* player = sObjectMgr.GetPlayer(itr->first))
+                    {
+                        float x, y, z, o;
+                        GetTeamStartLoc(player->GetTeam(), x, y, z, o);
+                        if (!player->IsWithinDist3d(x, y, z, maxDist))
+                        {
+                            player->TeleportTo(GetMapId(), x, y, z, o);
+                        }
+                    }
+                }
+                m_validStartPositionTimer = CHECK_PLAYER_POSITION_INVERVAL;
+            }
+            else
+                m_validStartPositionTimer -= diff;
+       }
+
         ModifyStartDelayTime(diff);
 
         if (!(m_Events & BG_STARTING_EVENT_1))
@@ -697,7 +715,7 @@ void BattleGround::EndBattleGround(Team winner)
 #endif /* ENABLE_ELUNA */
     this->RemoveFromBGFreeSlotQueue();
 
-    uint32 loser_rating = 0;
+    //uint32 loser_rating = 0;
     uint32 winner_rating = 0;
     WorldPacket data;
     int32 winmsg_id = 0;
@@ -789,7 +807,7 @@ void BattleGround::EndBattleGround(Team winner)
         {
             static SqlStatementID insPvPstatsPlayer;
             BattleGroundScoreMap::iterator score = m_PlayerScores.find(itr->first);
-            SqlStatement stmt = CharacterDatabase.CreateStatement(insPvPstatsPlayer, "INSERT INTO pvpstats_players (battleground_id, player_guid, score_killing_blows, score_deaths, score_honorable_kills, score_bonus_honor, score_damage_done, score_healing_done, attr_1, attr_2, attr_3, attr_4, attr_5) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            SqlStatement stmt = CharacterDatabase.CreateStatement(insPvPstatsPlayer, "INSERT INTO pvpstats_players (battleground_id, character_guid, score_killing_blows, score_deaths, score_honorable_kills, score_bonus_honor, score_damage_done, score_healing_done, attr_1, attr_2, attr_3, attr_4, attr_5) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
             stmt.addUInt32(battleground_id);
             stmt.addUInt32(plr->GetGUIDLow());
@@ -1233,9 +1251,10 @@ void BattleGround::AddOrSetPlayerToCorrectBgGroup(Player* plr, ObjectGuid plr_gu
 /// This method should be called when player logs into running battleground
 /// </summary>
 /// <param name="player">The player.</param>
-/// <param name="plr_guid">The plr_guid.</param>
-void BattleGround::EventPlayerLoggedIn(Player* player, ObjectGuid plr_guid)
+void BattleGround::EventPlayerLoggedIn(Player* player)
 {
+    ObjectGuid plr_guid = player->GetObjectGuid();
+
     // player is correct pointer
     for (OfflineQueue::iterator itr = m_OfflineQueue.begin(); itr != m_OfflineQueue.end(); ++itr)
     {
@@ -1807,4 +1826,23 @@ void BattleGround::SetBgRaid(Team team, Group* bg_raid)
 WorldSafeLocsEntry const* BattleGround::GetClosestGraveYard(Player* player)
 {
     return sObjectMgr.GetClosestGraveYard(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetMapId(), player->GetTeam());
+}
+
+/// <summary>
+/// Gets the winner in case of premature finish of the BG.
+/// Different BG's may have different criteria for choosing the winner besides simple player accounting
+/// </summary>
+/// <returns>The winner team</returns>
+Team BattleGround::GetPrematureWinner()
+{
+    uint32 hPlayers = GetPlayersCountByTeam(HORDE);
+    uint32 aPlayers = GetPlayersCountByTeam(ALLIANCE);
+    
+    if (aPlayers > hPlayers)
+      { return ALLIANCE; }
+
+    if (hPlayers > aPlayers)
+      { return HORDE; }
+
+    return TEAM_NONE;
 }

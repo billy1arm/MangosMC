@@ -379,10 +379,9 @@ enum BaseModGroup
 enum BaseModType
 {
     FLAT_MOD,
-    PCT_MOD
+    PCT_MOD,
+    MOD_END,
 };
-
-#define MOD_END (PCT_MOD+1)
 
 enum DeathState
 {
@@ -577,32 +576,32 @@ enum NPCFlags
  */
 enum MovementFlags
 {
-    MOVEFLAG_NONE = 0x00000000,
-    MOVEFLAG_FORWARD = 0x00000001,
-    MOVEFLAG_BACKWARD = 0x00000002,
-    MOVEFLAG_STRAFE_LEFT = 0x00000004,
-    MOVEFLAG_STRAFE_RIGHT = 0x00000008,
-    MOVEFLAG_TURN_LEFT = 0x00000010,
-    MOVEFLAG_TURN_RIGHT = 0x00000020,
-    MOVEFLAG_PITCH_UP = 0x00000040,
-    MOVEFLAG_PITCH_DOWN = 0x00000080,
-    MOVEFLAG_WALK_MODE = 0x00000100,               // Walking
+    MOVEFLAG_NONE             = 0x00000000,
+    MOVEFLAG_FORWARD          = 0x00000001,
+    MOVEFLAG_BACKWARD         = 0x00000002,
+    MOVEFLAG_STRAFE_LEFT      = 0x00000004,
+    MOVEFLAG_STRAFE_RIGHT     = 0x00000008,
+    MOVEFLAG_TURN_LEFT        = 0x00000010,
+    MOVEFLAG_TURN_RIGHT       = 0x00000020,
+    MOVEFLAG_PITCH_UP         = 0x00000040,
+    MOVEFLAG_PITCH_DOWN       = 0x00000080,
+    MOVEFLAG_WALK_MODE        = 0x00000100,               // Walking
 
-    MOVEFLAG_LEVITATING = 0x00000400,
-    MOVEFLAG_ROOT = 0x00000800,               // [-ZERO] is it really need and correct value
-    MOVEFLAG_FALLING = 0x00002000,
-    MOVEFLAG_FALLINGFAR = 0x00004000,
-    MOVEFLAG_SWIMMING = 0x00200000,               // appears with fly flag also
-    MOVEFLAG_SPLINE_ENABLED = 0x00400000,
-    MOVEFLAG_CAN_FLY = 0x00800000,               // [-ZERO] is it really need and correct value
-    MOVEFLAG_FLYING = 0x01000000,               // [-ZERO] is it really need and correct value
+    MOVEFLAG_LEVITATING       = 0x00000400,
+    MOVEFLAG_FLYING           = 0x00000800,               // [-ZERO] is it really need and correct value
+    MOVEFLAG_FALLING          = 0x00002000,
+    MOVEFLAG_FALLINGFAR       = 0x00004000,
+    MOVEFLAG_SWIMMING         = 0x00200000,               // appears with fly flag also
+    MOVEFLAG_SPLINE_ENABLED   = 0x00400000,
+    MOVEFLAG_CAN_FLY          = 0x00800000,               // [-ZERO] is it really need and correct value
+    MOVEFLAG_FLYING_OLD       = 0x01000000,               // [-ZERO] is it really need and correct value
 
-    MOVEFLAG_ONTRANSPORT = 0x02000000,               // Used for flying on some creatures
-    MOVEFLAG_SPLINE_ELEVATION = 0x04000000,               // [-ZERO] checkme! used for flight paths
-    //MOVEFLAG_SPLINE_ENABLED = 0x08000000,               // [-ZERO] wrong!
-    MOVEFLAG_WATERWALKING = 0x10000000,               // prevent unit from falling through water
-    MOVEFLAG_SAFE_FALL = 0x20000000,               // active rogue safe fall spell (passive)
-    MOVEFLAG_HOVER = 0x40000000
+    MOVEFLAG_ONTRANSPORT      = 0x02000000,               // Used for flying on some creatures
+    MOVEFLAG_SPLINE_ELEVATION = 0x04000000,               // used for flight paths
+    MOVEFLAG_ROOT             = 0x08000000,               // used for flight paths
+    MOVEFLAG_WATERWALKING     = 0x10000000,               // prevent unit from falling through water
+    MOVEFLAG_SAFE_FALL        = 0x20000000,               // active rogue safe fall spell (passive)
+    MOVEFLAG_HOVER            = 0x40000000
 };
 
 // flags that use in movement check for example at spell casting
@@ -655,7 +654,7 @@ class MovementInfo
         }
         ObjectGuid const& GetTransportGuid() const { return t_guid; }
         Position const* GetTransportPos() const { return &t_pos; }
-        uint32 GetTime() const { return time; }
+        uint32 GetTime() { return time; }
         uint32 GetTransportTime() const { return t_time; }
         uint32 GetFallTime() const { return fallTime; }
         void ChangeOrientation(float o) { pos.o = o; }
@@ -1971,7 +1970,10 @@ class Unit : public WorldObject
          * @param durabilityLoss whether or not durability loss should happen
          */
         void DealMeleeDamage(CalcDamageInfo* damageInfo, bool durabilityLoss);
-
+        /**
+        * Handles all extra attacks set up by a spell
+        */
+        void HandleProcExtraAttackFor(Unit* victim);
         /**
          * Calculates how much damage a spell should do, it will do some bonus damage according
          * to which SpellNonMeleeDamage::DmgClass it belongs to, ie: SPELL_DAMAGE_CLASS_RANGED
@@ -3242,11 +3244,15 @@ class Unit : public WorldObject
          */
         void RemoveAurasDueToItemSpell(Item* castItem, uint32 spellId);
         /** 
+         * Removes all \ref Aura s applied by spells casted by a certain \ref Player / \ref Unit
+         * @param casterGuid \ref ObjectGuid of the caster
+         */
+        void RemoveAurasByCaster(ObjectGuid casterGuid);
+        /** 
          * Removes all \ref Aura s that a certain spell cast by a certain \ref Player / \ref Unit
          * would cause via it's effects (up to 3 of them per \ref Aura)
          * @param spellId id of the \ref Spell causing the \ref Aura s you would like to remove
          * @param casterGuid \ref ObjectGuid of the caster
-         * @param mode reason for removal
          */
         void RemoveAurasByCasterSpell(uint32 spellId, ObjectGuid casterGuid);
         /** 
@@ -3392,7 +3398,7 @@ class Unit : public WorldObject
         {
             ShapeshiftForm form = GetShapeshiftForm();
             return form != FORM_NONE && form != FORM_BATTLESTANCE && form != FORM_BERSERKERSTANCE && form != FORM_DEFENSIVESTANCE &&
-                   form != FORM_SHADOW;
+                   form != FORM_SHADOW && form != FORM_STEALTH; 
         }
 
         float m_modMeleeHitChance;
@@ -3593,7 +3599,7 @@ class Unit : public WorldObject
         void CalculateDamageAbsorbAndResist(Unit* pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, const uint32 damage, uint32* absorb, uint32* resist, bool canReflect = false);
         void CalculateAbsorbResistBlock(Unit* pCaster, SpellNonMeleeDamage* damageInfo, SpellEntry const* spellProto, WeaponAttackType attType = BASE_ATTACK);
 
-        void  UpdateSpeed(UnitMoveType mtype, bool forced, float ratio = 1.0f);
+        virtual void UpdateSpeed(UnitMoveType mtype, bool forced, float ratio = 1.0f);
         float GetSpeed(UnitMoveType mtype) const;
         float GetSpeedRate(UnitMoveType mtype) const { return m_speed_rate[mtype]; }
         void SetSpeedRate(UnitMoveType mtype, float rate, bool forced = false);

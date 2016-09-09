@@ -76,6 +76,7 @@
 #if defined(TBC)
 #include "LFGMgr.h"
 #endif
+#include "DisableMgr.h"
 
 #ifdef ENABLE_ELUNA
 #include "LuaEngine.h"
@@ -89,6 +90,9 @@
 
 // WARDEN
 #include "WardenCheckMgr.h"
+
+#include <iostream>
+#include <sstream>
 
 INSTANTIATE_SINGLETON_1(World);
 
@@ -161,6 +165,10 @@ World::~World()
     CliCommandHolder* command = NULL;
     while (cliCmdQueue.next(command))
         { delete command; }
+
+    WorldSession* session = NULL;
+    while (addSessQueue.next(session))
+        { delete session; }
 
     VMAP::VMapFactory::clear();
     MMAP::MMapFactory::clear();
@@ -602,6 +610,7 @@ void World::LoadConfigSettings(bool reload)
     setConfigMinMax(CONFIG_UINT32_MAINTENANCE_DAY, "MaintenanceDay", 4, 0, 6);
 #endif
     setConfig(CONFIG_BOOL_ALL_TAXI_PATHS, "AllFlightPaths", false);
+    setConfig(CONFIG_BOOL_INSTANT_TAXI, "InstantFlightPaths", false);
 #if defined(CLASSIC)
     setConfig(CONFIG_UINT32_MOUNT_COST, "MountCost", 100000);    
     setConfigMin(CONFIG_UINT32_MIN_TRAIN_MOUNT_LEVEL, "MinTrainMountLevel", 40, 1);
@@ -628,11 +637,13 @@ void World::LoadConfigSettings(bool reload)
 
     setConfigMinMax(CONFIG_UINT32_MIN_PETITION_SIGNS, "MinPetitionSigns", 9, 0, 9);
 
-    setConfig(CONFIG_UINT32_GM_LOGIN_STATE,    "GM.LoginState",    2);
-    setConfig(CONFIG_UINT32_GM_VISIBLE_STATE,  "GM.Visible",       2);
-    setConfig(CONFIG_UINT32_GM_ACCEPT_TICKETS, "GM.AcceptTickets", 2);
-    setConfig(CONFIG_UINT32_GM_CHAT,           "GM.Chat",          2);
-    setConfig(CONFIG_UINT32_GM_WISPERING_TO,   "GM.WhisperingTo",  2);
+    setConfig(CONFIG_UINT32_GM_LOGIN_STATE,          "GM.LoginState",      2);
+    setConfig(CONFIG_UINT32_GM_VISIBLE_STATE,        "GM.Visible",         2);
+    setConfig(CONFIG_UINT32_GM_ACCEPT_TICKETS,       "GM.AcceptTickets",   2);
+    setConfig(CONFIG_UINT32_GM_TICKET_LIST_SIZE,     "GM.TicketListSize", 30);
+    setConfig(CONFIG_BOOL_GM_TICKET_OFFLINE_CLOSING, "GM.TicketOfflineClosing", false);
+    setConfig(CONFIG_UINT32_GM_CHAT,                 "GM.Chat",            2);
+    setConfig(CONFIG_UINT32_GM_WISPERING_TO,         "GM.WhisperingTo",    2);
 
     setConfig(CONFIG_UINT32_GM_LEVEL_IN_GM_LIST,  "GM.InGMList.Level",  SEC_ADMINISTRATOR);
     setConfig(CONFIG_UINT32_GM_LEVEL_IN_WHO_LIST, "GM.InWhoList.Level", SEC_ADMINISTRATOR);
@@ -802,7 +813,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_TIMERBAR_FATIGUE_GMLEVEL, "TimerBar.Fatigue.GMLevel", SEC_CONSOLE);
     setConfig(CONFIG_UINT32_TIMERBAR_FATIGUE_MAX,     "TimerBar.Fatigue.Max", 60);
     setConfig(CONFIG_UINT32_TIMERBAR_BREATH_GMLEVEL,  "TimerBar.Breath.GMLevel", SEC_CONSOLE);
-    setConfig(CONFIG_UINT32_TIMERBAR_BREATH_MAX,      "TimerBar.Breath.Max", 180);
+    setConfig(CONFIG_UINT32_TIMERBAR_BREATH_MAX,      "TimerBar.Breath.Max", 60);
     setConfig(CONFIG_UINT32_TIMERBAR_FIRE_GMLEVEL,    "TimerBar.Fire.GMLevel", SEC_CONSOLE);
     setConfig(CONFIG_UINT32_TIMERBAR_FIRE_MAX,        "TimerBar.Fire.Max", 1);
 
@@ -997,6 +1008,13 @@ void World::SetInitialWorldSettings()
     ///- Initialize config settings
     LoadConfigSettings();
 
+    ///- Initialize VMapManager function pointers (to untangle game/collision circular deps)
+    if (VMAP::VMapManager2* vmmgr2 = dynamic_cast<VMAP::VMapManager2*>(VMAP::VMapFactory::createOrGetVMapManager()))
+    {
+        //vmmgr2->GetLiquidFlagsPtr = &GetLiquidFlags;
+        vmmgr2->IsVMAPDisabledForPtr = &DisableMgr::IsVMAPDisabledFor;
+    }
+
     ///- Check the existence of the map files for all races start areas.
     if (!MapManager::ExistMapAndVMap(0, -6240.32f, 331.033f) ||                     // Dwarf/ Gnome
         !MapManager::ExistMapAndVMap(0, -8949.95f, -132.493f) ||                // Human
@@ -1130,6 +1148,9 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading Item Random Enchantments Table...");
     LoadRandomEnchantmentsTable();
 
+    sLog.outString("Loading Disables...");                  // must be before loading quests and items
+    DisableMgr::LoadDisables();
+
     sLog.outString("Loading Item Templates...");            // must be after LoadRandomEnchantmentsTable and LoadPageTexts
     sObjectMgr.LoadItemPrototypes();
 
@@ -1209,6 +1230,9 @@ void World::SetInitialWorldSettings()
     sObjectMgr.LoadQuestRelations();                        // must be after quest load
     sLog.outString(">>> Quests Relations loaded");
     sLog.outString();
+
+    sLog.outString("Checking Quest Disables...");
+    DisableMgr::CheckQuestDisables();                       // must be after loading quests
 
     sLog.outString("Loading Game Event Data...");           // must be after sPoolMgr.LoadFromDB and quests to properly load pool events and quests for events
     sGameEventMgr.LoadFromDB();
@@ -1313,7 +1337,7 @@ void World::SetInitialWorldSettings()
     sObjectMgr.LoadNpcGossips();                            // must be after load Creature and LoadGossipText
 
     sLog.outString("Loading Gossip scripts...");
-    sScriptMgr.LoadGossipScripts();                         // must be before gossip menu options
+    sScriptMgr.LoadDbScripts(DBS_ON_GOSSIP);                 // must be before gossip menu options
 
     sObjectMgr.LoadGossipMenus();
 
@@ -1326,7 +1350,7 @@ void World::SetInitialWorldSettings()
     sObjectMgr.LoadTrainers();                              // must be after load CreatureTemplate, TrainerTemplate
 
     sLog.outString("Loading Waypoint scripts...");          // before loading from creature_movement
-    sScriptMgr.LoadCreatureMovementScripts();
+    sScriptMgr.LoadDbScripts(DBS_ON_CREATURE_MOVEMENT);
 
     sLog.outString("Loading Waypoints...");
     sWaypointMgr.Load();
@@ -1388,13 +1412,13 @@ void World::SetInitialWorldSettings()
 
     ///- Load and initialize DBScripts Engine
     sLog.outString("Loading DB-Scripts Engine...");
-    sScriptMgr.LoadQuestStartScripts();                     // must be after load Creature/Gameobject(Template/Data) and QuestTemplate
-    sScriptMgr.LoadQuestEndScripts();                       // must be after load Creature/Gameobject(Template/Data) and QuestTemplate
-    sScriptMgr.LoadSpellScripts();                          // must be after load Creature/Gameobject(Template/Data)
-    sScriptMgr.LoadGameObjectScripts();                     // must be after load Creature/Gameobject(Template/Data)
-    sScriptMgr.LoadGameObjectTemplateScripts();             // must be after load Creature/Gameobject(Template/Data)
-    sScriptMgr.LoadEventScripts();                          // must be after load Creature/Gameobject(Template/Data)
-    sScriptMgr.LoadCreatureDeathScripts();                  // must be after load Creature/Gameobject(Template/Data)
+    sScriptMgr.LoadDbScripts(DBS_ON_QUEST_START);           // must be after load Creature/Gameobject(Template/Data) and QuestTemplate
+    sScriptMgr.LoadDbScripts(DBS_ON_QUEST_END);             // must be after load Creature/Gameobject(Template/Data) and QuestTemplate
+    sScriptMgr.LoadDbScripts(DBS_ON_SPELL);                 // must be after load Creature/Gameobject(Template/Data)
+    sScriptMgr.LoadDbScripts(DBS_ON_GO_USE);                // must be after load Creature/Gameobject(Template/Data)
+    sScriptMgr.LoadDbScripts(DBS_ON_GOT_USE);               // must be after load Creature/Gameobject(Template/Data)
+    sScriptMgr.LoadDbScripts(DBS_ON_EVENT);                 // must be after load Creature/Gameobject(Template/Data)
+    sScriptMgr.LoadDbScripts(DBS_ON_CREATURE_DEATH);        // must be after load Creature/Gameobject(Template/Data)
     sLog.outString(">>> DB Scripts loaded");
     sLog.outString();
 
@@ -1810,12 +1834,14 @@ void World::SendWorldText(int32 string_id, ...)
 }
 
 /// Sends a packet to all players with optional team and instance restrictions
-void World::SendGlobalMessage(WorldPacket* packet)
+void World::SendGlobalMessage(WorldPacket* packet, AccountTypes minSec)
 {
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
     {
         if (WorldSession* session = itr->second)
         {
+            if (session->GetSecurity() < minSec)
+                continue;
             Player* player = session->GetPlayer();
             if (player && player->IsInWorld())
                 { session->SendPacket(packet); }
@@ -2282,22 +2308,25 @@ void World::UpdateMaxSessionCounters()
 
 void World::LoadDBVersion()
 {
-    QueryResult* result = WorldDatabase.Query("SELECT version, creature_ai_version FROM db_version LIMIT 1");
+    QueryResult* result = WorldDatabase.Query("SELECT version, structure, content FROM db_version ORDER BY version DESC, structure DESC, content DESC LIMIT 1");
     if (result)
     {
         Field* fields = result->Fetch();
 
-        m_DBVersion              = fields[0].GetCppString();
-        m_CreatureEventAIVersion = fields[1].GetCppString();
+        uint32 version = fields[0].GetUInt32();
+        uint32 structure = fields[1].GetUInt32();
+        uint32 content = fields[2].GetUInt32();
 
         delete result;
+
+        std::stringstream ss;
+        ss << "Version: " << version << ", Structure: " << structure << ", Content: " << content;
+
+        m_DBVersion = ss.str();
     }
 
     if (m_DBVersion.empty())
         { m_DBVersion = "Unknown world database."; }
-
-    if (m_CreatureEventAIVersion.empty())
-        { m_CreatureEventAIVersion = "Unknown creature EventAI."; }
 }
 
 void World::setConfig(eConfigUInt32Values index, char const* fieldname, uint32 defvalue)

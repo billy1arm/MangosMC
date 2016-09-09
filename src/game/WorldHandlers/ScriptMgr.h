@@ -30,6 +30,8 @@
 #include "ObjectGuid.h"
 #include "DBCEnums.h"
 #include <ace/Atomic_Op.h>
+#include <ace/Thread_Mutex.h>
+#include <ace/Guard_T.h>
 
 struct AreaTriggerEntry;
 struct SpellEntry;
@@ -46,6 +48,22 @@ class Quest;
 class SpellCastTargets;
 class Unit;
 class WorldObject;
+
+enum DBScriptType
+{
+    DBS_INTERNAL              = -1,
+    DBS_ON_QUEST_START        = 0,
+    DBS_ON_QUEST_END          = 1,
+    DBS_ON_GOSSIP             = 2,
+    DBS_ON_CREATURE_MOVEMENT  = 3,
+    DBS_ON_CREATURE_DEATH     = 4,
+    DBS_ON_SPELL              = 5,
+    DBS_ON_GO_USE             = 6,
+    DBS_ON_GOT_USE            = 7,
+    DBS_ON_EVENT              = 8,
+    DBS_END                   = 9,
+};
+#define DBS_START DBS_ON_QUEST_START
 
 enum ScriptedObjectType
 {
@@ -86,7 +104,7 @@ enum DBScriptCommand                                        // resSource, resTar
     SCRIPT_COMMAND_TELEPORT_TO              = 6,            // source or target with Player, datalong2 = map_id, x/y/z
     SCRIPT_COMMAND_QUEST_EXPLORED           = 7,            // one from source or target must be Player, another GO/Creature, datalong=quest_id, datalong2=distance or 0
     SCRIPT_COMMAND_KILL_CREDIT              = 8,            // source or target with Player, datalong = creature entry (or 0 for target-entry), datalong2 = bool (0=personal credit, 1=group credit)
-    SCRIPT_COMMAND_RESPAWN_GAMEOBJECT       = 9,            // source = any, datalong=db_guid, datalong2=despawn_delay
+    SCRIPT_COMMAND_RESPAWN_GO               = 9,            // source = any, datalong=db_guid, datalong2=despawn_delay
     SCRIPT_COMMAND_TEMP_SUMMON_CREATURE     = 10,           // source = any, datalong=creature entry, datalong2=despawn_delay
                                                             // data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL = summon active
     SCRIPT_COMMAND_OPEN_DOOR                = 11,           // datalong=db_guid (or not provided), datalong2=reset_delay
@@ -129,23 +147,30 @@ enum DBScriptCommand                                        // resSource, resTar
                                                             // dataint=diff to change a waittime of current Waypoint Movement
     SCRIPT_COMMAND_PAUSE_WAYPOINTS          = 32,           // resSource = Creature
                                                             // datalong = 0: unpause waypoint 1: pause waypoint
-    SCRIPT_COMMAND_JOIN_LFG                 = 33,           // datalong = zoneId; // Currently only implemented in Zero
+    SCRIPT_COMMAND_JOIN_LFG                 = 33,           // datalong = zoneId;
     SCRIPT_COMMAND_TERMINATE_COND           = 34,           // datalong = condition_id, datalong2 = if != 0 then quest_id of quest that will be failed for player's group if the script is terminated
                                                             // data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL terminate when condition is false ELSE terminate when condition is true
-    SCRIPT_COMMAND_SEND_AI_EVENT_AROUND     = 35,           // resSource = Creature, resTarget = Unit, datalong = AIEventType, datalong2 = radius
+    SCRIPT_COMMAND_SEND_AI_EVENT_AROUND     = 35,           // resSource = Creature, resTarget = Unit
+                                                            // datalong = AIEventType
+                                                            // datalong2 = radius
     SCRIPT_COMMAND_TURN_TO                  = 36,           // resSource = Unit, resTarget = Unit/none
     SCRIPT_COMMAND_MOVE_DYNAMIC             = 37,           // resSource = Creature, resTarget Worldobject.
                                                             // datalong = 0: Move resSource towards resTarget
                                                             // datalong != 0: Move resSource to a random point between datalong2..datalong around resTarget.
-                                                            //      orientation != 0: Obtain a random point around resTarget in direction of orientation
+                                                            // orientation != 0: Obtain a random point around resTarget in direction of orientation
                                                             // data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL Obtain a random point around resTarget in direction of resTarget->GetOrientation + orientation
                                                             // for resTarget == resSource and orientation == 0 this will mean resSource moving forward
     SCRIPT_COMMAND_SEND_MAIL                = 38,           // resSource WorldObject, can be NULL, resTarget Player
                                                             // datalong: Send mailTemplateId from resSource (if provided) to player resTarget
                                                             // datalong2: AlternativeSenderEntry. Use as sender-Entry
                                                             // dataint1: Delay (>= 0) in Seconds
-    SCRIPT_COMMAND_CHANGE_ENTRY             = 39,           // resSource = Creature, datalong=creature entry
-                                                            // dataint1 = entry
+    SCRIPT_COMMAND_SET_FLY                  = 39,           // resSource = Creature, datalong = 0 (off) | 1 (on)
+    SCRIPT_COMMAND_DESPAWN_GO               = 40,           // resTarget = GameObject
+    SCRIPT_COMMAND_RESPAWN                  = 41,           // resSource = Creature. Requires SCRIPT_FLAG_BUDDY_IS_DESPAWNED to find dead or despawned targets
+    SCRIPT_COMMAND_SET_EQUIPMENT_SLOTS      = 42,           // resSource = Creature, datalong = reset default 0(false) | 1(true)
+                                                            // dataint = main hand slot, dataint2 = offhand slot, dataint3 = ranged slot
+    SCRIPT_COMMAND_RESET_GO                 = 43,           // resTarget = GameObject
+    SCRIPT_COMMAND_UPDATE_TEMPLATE          = 44,           // resSource = Creature, datalong = new creature entry, datalong2 = 0(Alliance) | 1(Horde)
 };
 
 #define MAX_TEXT_ID 4                                       // used for SCRIPT_COMMAND_TALK, SCRIPT_COMMAND_EMOTE, SCRIPT_COMMAND_CAST_SPELL, SCRIPT_COMMAND_TERMINATE_SCRIPT
@@ -159,8 +184,9 @@ enum ScriptInfoDataFlags
     SCRIPT_FLAG_COMMAND_ADDITIONAL          = 0x08,         // command dependend
     SCRIPT_FLAG_BUDDY_BY_GUID               = 0x10,         // take the buddy by guid
     SCRIPT_FLAG_BUDDY_IS_PET                = 0x20,         // buddy is a pet
+    SCRIPT_FLAG_BUDDY_IS_DESPAWNED          = 0x40,         // buddy is dead or despawned
 };
-#define MAX_SCRIPT_FLAG_VALID               (2 * SCRIPT_FLAG_BUDDY_IS_PET - 1)
+#define MAX_SCRIPT_FLAG_VALID               (2 * SCRIPT_FLAG_BUDDY_IS_DESPAWNED - 1)
 
 struct ScriptInfo
 {
@@ -392,11 +418,28 @@ struct ScriptInfo
             uint32 altSender;                               // datalong2;
         } sendMail;
 
-        struct                                              // SCRIPT_COMMAND_MORPH_TO_ENTRY_OR_MODEL (23)
+        struct                                              // SCRIPT_COMMAND_SET_FLY (39)
         {
-            uint32 creatureEntry;                           // datalong
-            uint32 empty1;                                  // datalong2
-        } changeEntry;
+            uint32 enable;                                  // datalong
+            uint32 empty;                                   // datalong2
+        } fly;
+
+        // datalong unused                                  // SCRIPT_COMMAND_DESPAWN_GO (40)
+        // datalong unused                                  // SCRIPT_COMMAND_RESPAWN (41)
+
+        struct                                              // SCRIPT_COMMAND_SET_EQUIPMENT_SLOTS (42)
+        {
+            uint32 resetDefault;                            // datalong
+            uint32 empty;                                   // datalong2
+        } setEquipment;
+
+        // datalong unused                                  // SCRIPT_COMMAND_RESET_GO (43)
+
+        struct                                              // SCRIPT_COMMAND_UPDATE_TEMPLATE (44)
+        {
+            uint32 entry;                                   // datalong
+            uint32 faction;                                 // datalong2
+        } updateTemplate;
 
         struct
         {
@@ -421,7 +464,7 @@ struct ScriptInfo
     {
         switch (command)
         {
-            case SCRIPT_COMMAND_RESPAWN_GAMEOBJECT:
+            case SCRIPT_COMMAND_RESPAWN_GO:
                 return respawnGo.goGuid;
             case SCRIPT_COMMAND_OPEN_DOOR:
             case SCRIPT_COMMAND_CLOSE_DOOR:
@@ -435,11 +478,13 @@ struct ScriptInfo
     {
         switch (command)
         {
-            case SCRIPT_COMMAND_RESPAWN_GAMEOBJECT:
+            case SCRIPT_COMMAND_RESPAWN_GO:
             case SCRIPT_COMMAND_OPEN_DOOR:
             case SCRIPT_COMMAND_CLOSE_DOOR:
             case SCRIPT_COMMAND_ACTIVATE_OBJECT:
             case SCRIPT_COMMAND_GO_LOCK_STATE:
+            case SCRIPT_COMMAND_DESPAWN_GO:
+            case SCRIPT_COMMAND_RESET_GO:
                 return false;
             default:
                 return true;
@@ -461,6 +506,7 @@ struct ScriptInfo
             case SCRIPT_COMMAND_TERMINATE_COND:
             case SCRIPT_COMMAND_TURN_TO:
             case SCRIPT_COMMAND_MOVE_DYNAMIC:
+            case SCRIPT_COMMAND_SET_FLY:
                 return true;
             default:
                 return false;
@@ -468,18 +514,22 @@ struct ScriptInfo
     }
 };
 
+typedef std::vector < ScriptInfo > ScriptChain;
+typedef std::map < uint32 /*id*/, ScriptChain > ScriptChainMap;
+typedef std::vector < ScriptChainMap > DBScripts;
+
 class ScriptAction
 {
     public:
-        ScriptAction(const char* _table, Map* _map, ObjectGuid _sourceGuid, ObjectGuid _targetGuid, ObjectGuid _ownerGuid, ScriptInfo const* _script) :
-            m_table(_table), m_map(_map), m_sourceGuid(_sourceGuid), m_targetGuid(_targetGuid), m_ownerGuid(_ownerGuid), m_script(_script)
+        ScriptAction(DBScriptType _type, Map* _map, ObjectGuid _sourceGuid, ObjectGuid _targetGuid, ObjectGuid _ownerGuid, ScriptInfo const* _script) :
+            m_type(_type), m_map(_map), m_sourceGuid(_sourceGuid), m_targetGuid(_targetGuid), m_ownerGuid(_ownerGuid), m_script(_script)
         {}
 
         bool HandleScriptStep();                            // return true IF AND ONLY IF the script should be terminated
 
-        const char* GetTableName() const
+        DBScriptType GetType() const
         {
-            return m_table;
+            return m_type;
         }
         uint32 GetId() const
         {
@@ -498,16 +548,16 @@ class ScriptAction
             return m_ownerGuid;
         }
 
-        bool IsSameScript(const char* table, uint32 id, ObjectGuid sourceGuid, ObjectGuid targetGuid, ObjectGuid ownerGuid) const
+        bool IsSameScript(DBScriptType type, uint32 id, ObjectGuid sourceGuid, ObjectGuid targetGuid, ObjectGuid ownerGuid) const
         {
-            return table == m_table && id == GetId() &&
+            return type == m_type && id == GetId() &&
                    (sourceGuid == m_sourceGuid || !sourceGuid) &&
                    (targetGuid == m_targetGuid || !targetGuid) &&
                    (ownerGuid == m_ownerGuid || !ownerGuid);
         }
 
     private:
-        const char* m_table;                                // of which table the script was started
+        DBScriptType m_type;                                // which type has the script was started
         Map* m_map;                                         // Map on which the action will be executed
         ObjectGuid m_sourceGuid;
         ObjectGuid m_targetGuid;
@@ -524,19 +574,6 @@ class ScriptAction
         Player* GetPlayerTargetOrSourceAndLog(WorldObject* pSource, WorldObject* pTarget);
 };
 
-typedef std::multimap < uint32 /*delay*/, ScriptInfo > ScriptMap;
-typedef std::map < uint32 /*id*/, ScriptMap > ScriptMapMap;
-typedef std::pair<const char*, ScriptMapMap> ScriptMapMapName;
-
-extern ScriptMapMapName sQuestEndScripts;
-extern ScriptMapMapName sQuestStartScripts;
-extern ScriptMapMapName sSpellScripts;
-extern ScriptMapMapName sGameObjectScripts;
-extern ScriptMapMapName sGameObjectTemplateScripts;
-extern ScriptMapMapName sEventScripts;
-extern ScriptMapMapName sGossipScripts;
-extern ScriptMapMapName sCreatureDeathScripts;
-extern ScriptMapMapName sCreatureMovementScripts;
 
 enum ScriptLoadResult
 {
@@ -554,16 +591,7 @@ class ScriptMgr
 
         std::string GenerateNameToId(ScriptedObjectType sot, uint32 id);
 
-        void LoadGameObjectScripts();
-        void LoadGameObjectTemplateScripts();
-        void LoadQuestEndScripts();
-        void LoadQuestStartScripts();
-        void LoadEventScripts();
-        void LoadSpellScripts();
-        void LoadGossipScripts();
-        void LoadCreatureDeathScripts();
-        void LoadCreatureMovementScripts();
-
+        void LoadDbScripts(DBScriptType type);
         void LoadDbScriptStrings();
 
         void LoadScriptNames();
@@ -574,15 +602,20 @@ class ScriptMgr
 
         bool ReloadScriptBinding();
 
+        ScriptChainMap const* GetScriptChainMap(DBScriptType type);
+
         const char* GetScriptName(uint32 id) const
         {
             return id < m_scriptNames.size() ? m_scriptNames[id].c_str() : "";
         }
+
         uint32 GetScriptId(const char* name) const;
+
         uint32 GetScriptIdsCount() const
         {
             return m_scriptNames.size();
         }
+
         uint32 GetBoundScriptId(ScriptedObjectType entity, int32 entry);
 
         ScriptLoadResult LoadScriptLibrary(const char* libName);
@@ -633,30 +666,32 @@ class ScriptMgr
         bool OnItemUse(Player* pPlayer, Item* pItem, SpellCastTargets const& targets);
         bool OnAreaTrigger(Player* pPlayer, AreaTriggerEntry const* atEntry);
         bool OnProcessEvent(uint32 eventId, Object* pSource, Object* pTarget, bool isStart);
-        bool OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, Creature* pTarget, ObjectGuid originalCasterGuid);
+        bool OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, Unit* pTarget, ObjectGuid originalCasterGuid);
         bool OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, GameObject* pTarget, ObjectGuid originalCasterGuid);
         bool OnEffectDummy(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, Item* pTarget, ObjectGuid originalCasterGuid);
-        bool OnEffectScriptEffect(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, Creature* pTarget, ObjectGuid originalCasterGuid);
+        bool OnEffectScriptEffect(Unit* pCaster, uint32 spellId, SpellEffectIndex effIndex, Unit* pTarget, ObjectGuid originalCasterGuid);
         bool OnAuraDummy(Aura const* pAura, bool apply);
 
     private:
         void CollectPossibleEventIds(std::set<uint32>& eventIds);
-        void LoadScripts(ScriptMapMapName& scripts, const char* tablename);
-        void CheckScriptTexts(ScriptMapMapName const& scripts, std::set<int32>& ids);
+        void LoadScripts(DBScriptType type);
+        void CheckScriptTexts(std::set<int32>& ids);
 
         typedef std::vector<std::string> ScriptNameMap;
         typedef UNORDERED_MAP<int32, uint32> EntryToScriptIdMap;
 
-        EntryToScriptIdMap      m_scriptBind[SCRIPTED_MAX_TYPE];
+        EntryToScriptIdMap m_scriptBind[SCRIPTED_MAX_TYPE];
 
-        ScriptNameMap           m_scriptNames;
-
+        ScriptNameMap      m_scriptNames;
+        DBScripts          m_dbScripts;
 #ifdef _DEBUG
-        // mutex allowing to reload the script binding table; TODO just do it AWAY from any map update, e.g. right after sessions update 
+        // mutex allowing to reload the script binding table
         ACE_RW_Thread_Mutex m_bindMutex;
 #endif /* _DEBUG */
         // atomic op counter for active scripts amount
         ACE_Atomic_Op<ACE_Thread_Mutex, long> m_scheduledScripts;
+        char __cache_guard[1024];
+        ACE_Thread_Mutex m_lock;
 };
 
 // Starters for events

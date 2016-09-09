@@ -79,7 +79,7 @@ enum MangosStrings
     LANG_NON_EXIST_CHARACTER            = 47,
     LANG_FRIEND_IGNORE_UNKNOWN          = 48,
     LANG_LEVEL_MINREQUIRED              = 49,
-    LANG_LEVEL_MINREQUIRED_AND_ITEM     = 50,
+    LANG_REQUIRED_ITEM                  = 50,
     LANG_NPC_TAINER_HELLO               = 51,
     LANG_COMMAND_INVALID_ITEM_COUNT     = 52,
     LANG_COMMAND_MAIL_ITEMS_LIMIT       = 53,
@@ -96,7 +96,11 @@ enum MangosStrings
     LANG_GM_NO_WHISPER                  = 64,
     LANG_USING_SCRIPT_LIB_UNKNOWN       = 65,
     LANG_USING_SCRIPT_LIB_NONE          = 66,
-    // Room for more level 0              67-99 not used
+    LANG_WRONG_TEAM_HORDE               = 67,
+    LANG_WRONG_TEAM_ALLIANCE            = 68,
+    LANG_LEVEL_MAXREQUIRED              = 69,
+    LANG_LEVEL_EQUALREQUIRED            = 70,
+    // Room for more level 0              71-99 not used
 
     // level 1 chat
     LANG_GLOBAL_NOTIFY                  = 100,
@@ -363,9 +367,9 @@ enum MangosStrings
     LANG_TRIGGER_TAVERN                 = 364,
     LANG_TRIGGER_QUEST                  = 365,
     LANG_TRIGGER_EXPLORE_QUEST          = 366,
-    LANG_TRIGGER_REQ_LEVEL              = 367,
-    LANG_TRIGGER_REQ_ITEMS              = 368,
-    LANG_TRIGGER_REQ_QUEST              = 369,
+    LANG_TRIGGER_CONDITION              = 367,
+    //                                    368
+    //                                    369
     //                                    370 used in master branch
     //                                    371 used in master branch
     //                                    372 used in master branch
@@ -597,8 +601,8 @@ enum MangosStrings
     LANG_GET_UINT_FIELD                 = 570,
     LANG_GET_FLOAT                      = 571,              // log
     LANG_GET_FLOAT_FIELD                = 572,
-    //                                    573,              // not used
-    //                                    574,              // not used
+    LANG_GET_GAMEOBJECT_LOOTSTATE       = 573,
+    LANG_GET_GAMEOBJECT_STATE           = 574,
     LANG_CHANGE_INT32                   = 575,              // log
     LANG_CHANGE_INT32_FIELD             = 576,
 
@@ -714,7 +718,7 @@ enum MangosStrings
     LANG_BG_QUEUE_ANNOUNCE_SELF         = 711,
     LANG_BG_QUEUE_ANNOUNCE_WORLD        = 712,
     // LANG_YOUR_ARENA_LEVEL_REQ_ERROR   = 713,
-    //                                  = 714, not used
+    LANG_BG_IS_DISABLED                 = 714,
     LANG_YOUR_BG_LEVEL_REQ_ERROR        = 715,
     //                                  = 716, not used
     LANG_BG_STARTED_ANNOUNCE_WORLD      = 717,
@@ -749,7 +753,7 @@ enum MangosStrings
     // LANG_DIST_ARENA_POINTS_TEAM_START   = 744,
     // LANG_DIST_ARENA_POINTS_TEAM_END     = 745,
     // LANG_DIST_ARENA_POINTS_END          = 746,
-    //                                  = 747, not used
+    LANG_MAP_IS_DISABLED                = 747,
     //                                  = 748, not used
     //                                  = 749, not used
     LANG_BATTLEGROUND_PREMATURE_FINISH_WARNING      = 750,  // "Not enough players. This game will close in %u mins."
@@ -1025,7 +1029,12 @@ enum MangosStrings
     LANG_COMMAND_TICKETS_SYSTEM_ON      = 1511,
     LANG_COMMAND_TICKETS_SYSTEM_OFF     = 1512,
     LANG_COMMAND_TICKET_CANT_CLOSE      = 1513,
-    // Room for more Level 2              1514-1599 not used
+    LANG_COMMAND_TICKET_BRIEF_INFO      = 1514,
+    LANG_COMMAND_TICKET_COUNT_ONLINE    = 1515,
+    LANG_COMMAND_TICKET_OFFLINE_INFO    = 1516,
+    LANG_COMMAND_TICKET_COUNT_ALL       = 1517,
+    LANG_COMMAND_TICKET_ACCEPT_STATE    = 1518,
+    // Room for more Level 2              1519-1599 not used
 
     // Outdoor PvP
     LANG_OPVP_EP_CAPTURE_NPT_H          = 1600,

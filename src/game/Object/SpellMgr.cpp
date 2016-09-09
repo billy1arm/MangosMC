@@ -109,6 +109,7 @@ uint32 GetSpellCastTime(SpellEntry const* spellInfo, Spell const* spell)
     if (spell)
     {
         // some triggered spells have data only usable for client
+        // any triggered spell should be an instant cast
         if (spell->IsTriggeredSpellWithRedundentCastTime())
             { return 0; }
 
@@ -512,13 +513,9 @@ SpellSpecific GetSpellSpecific(uint32 spellId)
             if ((spellInfo->IsFitToFamilyMask(UI64LIT(0x0000000020180400))) && spellInfo->baseLevel != 0)
                 { return SPELL_JUDGEMENT; }
 
-            for (int i = 0; i < 3; ++i)
-            {
+            if (spellInfo->HasSpellEffect(SPELL_EFFECT_APPLY_AREA_AURA_PARTY))
                 // only paladin auras have this
-                if (spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AREA_AURA_PARTY)
-                    { return SPELL_AURA; }
-            }
-            break;
+                { return SPELL_AURA; }
         }
         case SPELLFAMILY_SHAMAN:
         {
@@ -579,6 +576,7 @@ bool IsSingleFromSpellSpecificSpellRanksPerTarget(SpellSpecific spellSpec1, Spel
         case SPELL_AURA:
         case SPELL_CURSE:
         case SPELL_ASPECT:
+        case SPELL_POSITIVE_SHOUT:
             return spellSpec1 == spellSpec2;
         default:
             return false;
@@ -679,6 +677,17 @@ bool IsExplicitNegativeTarget(uint32 targetA)
 
 bool IsPositiveEffect(SpellEntry const* spellproto, SpellEffectIndex effIndex)
 {
+    //fast returns in some special cases
+    switch (spellproto->Id)
+    {
+        case 13003:
+        case 13010:
+        case 23182:  // Mark of Frost
+            return false;
+        default:
+            break;
+    }
+
     switch (spellproto->Effect[effIndex])
     {
         case SPELL_EFFECT_DUMMY:
@@ -847,6 +856,8 @@ bool IsPositiveEffect(SpellEntry const* spellproto, SpellEffectIndex effIndex)
                     switch (spellproto->EffectMiscValue[effIndex])
                     {
                         case SPELLMOD_COST:                 // dependent from bas point sign (negative -> positive)
+                        if(spellproto->Id == 12042)         // Arcane Power
+                                break;
                             if (spellproto->CalculateSimpleValue(effIndex) > 0)
                                 { return false; }
                             break;
@@ -1904,6 +1915,7 @@ void SpellMgr::ModDBCSpellAttributes()
     uint32 spell_id;
 
     list_spell_id.push_back(20647);
+    list_spell_id.push_back(16870);
 
     for (std::list<uint32>::iterator it = list_spell_id.begin(); it != list_spell_id.end(); ++it)
     {
@@ -1919,6 +1931,9 @@ void SpellMgr::ModDBCSpellAttributes()
             case 20647:
                 spellInfo->Attributes |= SPELL_ATTR_IMPOSSIBLE_DODGE_PARRY_BLOCK;
                 spellInfo->AttributesEx3 |= SPELL_ATTR_EX3_CANT_MISS;                
+                break;
+            case 16870:
+                spellInfo->procFlags = PROC_FLAG_NONE;
                 break;
         }
     }
@@ -1945,30 +1960,15 @@ bool SpellMgr::canStackSpellRanksInSpellBook(SpellEntry const* spellInfo) const
     if (IsSkillBonusSpell(spellInfo->Id))
         { return false; }
 
-    // All stance spells. if any better way, change it.
-    for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
+    // Any spell which has skill forward spell
+    // Include party auras from paladins, stealth from rogues, shapeshift spells for druids...and more :)
+    SkillLineAbilityMap::const_iterator itr = mSkillLineAbilityMap.find(spellInfo->Id);
+    if (itr != mSkillLineAbilityMap.end())
     {
-        switch (spellInfo->SpellFamilyName)
-        {
-            case SPELLFAMILY_PALADIN:
-                // Paladin aura Spell
-                if (spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AREA_AURA_PARTY)
-                    { return false; }
-                break;
-            case SPELLFAMILY_DRUID:
-                // Druid form Spell
-                if (spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AURA &&
-                    spellInfo->EffectApplyAuraName[i] == SPELL_AURA_MOD_SHAPESHIFT)
-                    { return false; }
-                break;
-            case SPELLFAMILY_ROGUE:
-                // Rogue Stealth
-                if (spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AURA &&
-                    spellInfo->EffectApplyAuraName[i] == SPELL_AURA_MOD_SHAPESHIFT)
-                    { return false; }
-                break;
-        }
+        if (itr->second->forward_spellid != 0)
+            { return false; }
     }
+
     return true;
 }
 
@@ -1989,6 +1989,10 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
 
     // Allow stack passive and not passive spells
     if (spellInfo_1->HasAttribute(SPELL_ATTR_PASSIVE) != spellInfo_2->HasAttribute(SPELL_ATTR_PASSIVE))
+        { return false; }
+    
+    // Gnomish Death Ray
+    if (spellInfo_1->Id == 13278 || spellInfo_2->Id == 13278)
         { return false; }
 
     // Specific spell family spells
@@ -2080,8 +2084,8 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     // Icon overload
                     // All Generic Spell with SpellIconID 200 et Ancestral Fortitude
                     // Second condition is usefull to avoid stacking Ancestral Fortitude.
-                    if ((spellInfo_1->SpellIconID == 200 && (spellInfo_2->Id == 16177 || spellInfo_2->Id == 16236 || spellInfo_2->Id == 16237) && !(spellInfo_1->Id == 16177 || spellInfo_1->Id == 16236 || spellInfo_1->Id == 16237))
-                        || ((spellInfo_1->Id == 16177 || spellInfo_1->Id == 16236 || spellInfo_1->Id == 16237) && spellInfo_2->SpellIconID == 200) && !(spellInfo_2->Id == 16177 || spellInfo_2->Id == 16236 || spellInfo_2->Id == 16237))
+                    if ((spellInfo_1->SpellIconID == 200 && ((spellInfo_2->Id == 16177 || spellInfo_2->Id == 16236 || spellInfo_2->Id == 16237) && !(spellInfo_1->Id == 16177 || spellInfo_1->Id == 16236 || spellInfo_1->Id == 16237)))
+                        || (spellInfo_2->SpellIconID == 200 && ((spellInfo_1->Id == 16177 || spellInfo_1->Id == 16236 || spellInfo_1->Id == 16237) && !(spellInfo_2->Id == 16177 || spellInfo_2->Id == 16236 || spellInfo_2->Id == 16237))))
                     {
                         return false;
                     }
@@ -2090,8 +2094,8 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     // Icon overload
                     // All Generic Spell with SpellIconID 958 et Scare Beast
                     // Second condition is usefull to avoid stacking Scare Beast
-                    if ((spellInfo_1->SpellIconID == 958 && (spellInfo_2->Id == 14326 || spellInfo_2->Id == 14327 || spellInfo_2->Id == 1513) && !(spellInfo_1->Id == 1513 || spellInfo_1->Id == 14326 || spellInfo_1->Id == 14327))
-                        || ((spellInfo_1->Id == 1513 || spellInfo_1->Id == 14326 || spellInfo_1->Id == 14327) && spellInfo_2->SpellIconID == 958) && !(spellInfo_2->Id == 1513 || spellInfo_2->Id == 14326 || spellInfo_2->Id == 14327))
+                    if ((spellInfo_1->SpellIconID == 958 && ((spellInfo_2->Id == 14326 || spellInfo_2->Id == 14327 || spellInfo_2->Id == 1513) && !(spellInfo_1->Id == 1513 || spellInfo_1->Id == 14326 || spellInfo_1->Id == 14327)))
+                        || (spellInfo_2->SpellIconID == 958 && ((spellInfo_1->Id == 14326 || spellInfo_1->Id == 14327 || spellInfo_1->Id == 1513) && !(spellInfo_2->Id == 1513 || spellInfo_2->Id == 14326 || spellInfo_2->Id == 14327))))
                     {
                         return false;
                     }
@@ -2452,8 +2456,8 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     break;
                 case SPELLFAMILY_PRIEST:
                     // Devouring Plague and Shadow Vulnerability
-                    if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x2000000)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x800000000))) ||
-                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x2000000)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x800000000))))
+                    if (((spellInfo_1->SpellFamilyFlags & UI64LIT(0x2000000)) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x4000000))) ||
+                        ((spellInfo_2->SpellFamilyFlags & UI64LIT(0x2000000)) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x4000000))))
                         { return false; }
 
                     // StarShards and Shadow Word: Pain
@@ -2523,8 +2527,8 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                         { return false; }
 
                     // Omen of Clarity and Blood Frenzy
-                    if (((spellInfo_1->SpellFamilyFlags == UI64LIT(0x0) && spellInfo_1->SpellIconID == 108) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x20000000000000))) ||
-                        ((spellInfo_2->SpellFamilyFlags == UI64LIT(0x0) && spellInfo_2->SpellIconID == 108) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x20000000000000))))
+                    if (((!spellInfo_1->SpellFamilyFlags && spellInfo_1->SpellIconID == 108) && (spellInfo_2->SpellFamilyFlags & UI64LIT(0x20000000000000))) ||
+                        ((!spellInfo_2->SpellFamilyFlags && spellInfo_2->SpellIconID == 108) && (spellInfo_1->SpellFamilyFlags & UI64LIT(0x20000000000000))))
                         { return false; }
                     break;
 
@@ -3411,7 +3415,7 @@ void SpellMgr::LoadSpellLearnSpells()
                 // talent or passive spells or skill-step spells auto-casted and not need dependent learning,
                 // pet teaching spells don't must be dependent learning (casted)
                 // other required explicit dependent learning
-                dbc_node.autoLearned = entry->EffectImplicitTargetA[i] == TARGET_PET || GetTalentSpellCost(spell) > 0 || IsPassiveSpell(entry) || IsSpellHaveEffect(entry, SPELL_EFFECT_SKILL_STEP);
+                dbc_node.autoLearned = entry->EffectImplicitTargetA[i] == TARGET_PET || GetTalentSpellCost(spell) > 0 || IsPassiveSpell(entry) || entry->HasSpellEffect(SPELL_EFFECT_SKILL_STEP);
 
                 SpellLearnSpellMapBounds db_node_bounds = GetSpellLearnSpellMapBounds(spell);
 
@@ -4184,7 +4188,7 @@ void SpellMgr::CheckUsedSpells(char const* table)
             }
             else
             {
-                if (effectType >= 0 && !IsSpellHaveEffect(spellEntry, SpellEffects(effectType)))
+                if (effectType >= 0 && !spellEntry->HasSpellEffect(SpellEffects(effectType)))
                 {
                     sLog.outError("Spell %u '%s' not have effect %u but used in %s.", spell, name.c_str(), effectType, code.c_str());
                     continue;
@@ -4244,7 +4248,7 @@ void SpellMgr::CheckUsedSpells(char const* table)
                 }
                 else
                 {
-                    if (effectType >= 0 && !IsSpellHaveEffect(spellEntry, SpellEffects(effectType)))
+                    if (effectType >= 0 && !spellEntry->HasSpellEffect(SpellEffects(effectType)))
                         { continue; }
 
                     if (auraType >= 0 && !IsSpellHaveAura(spellEntry, AuraType(auraType)))
@@ -4445,7 +4449,7 @@ bool SpellArea::IsFitToRequirements(Player const* player, uint32 newZone, uint32
         if (questStart)
         {
             // not in expected required quest state
-            if ((!questStartCanActive || !player->IsActiveQuest(questStart)) || player->GetQuestRewardStatus(questStart))
+            if ((!questStartCanActive || !player->IsActiveQuest(questStart)) && !player->GetQuestRewardStatus(questStart))
                 { return false; }
         }
 

@@ -501,6 +501,9 @@ class Spell
 
         typedef std::list<Unit*> UnitList;
 
+        void SetSelfContainer(Spell** pCurrentContainer) { m_selfContainer = pCurrentContainer; }
+        Spell** GetSelfContainer() { return m_selfContainer; }
+
     protected:
         bool HasGlobalCooldown();
         void TriggerGlobalCooldown();
@@ -636,6 +639,7 @@ class Spell
         void DoAllEffectOnTarget(ItemTargetInfo* target);
         bool IsAliveUnitPresentInTargetList();
         SpellCastResult CanOpenLock(SpellEffectIndex effIndex, uint32 lockid, SkillType& skillid, int32& reqSkillValue, int32& skillValue);
+        SpellCastResult CanTameUnit(bool isGM = false);
         // -------------------------------------------
 
         // List For Triggered Spells

@@ -31,6 +31,7 @@
 #include "SharedDefines.h"
 #include "DBCStores.h"
 #include "SQLStorages.h"
+#include "DisableMgr.h"
 
 static eConfigFloatValues const qualityToRate[MAX_ITEM_QUALITY] =
 {
@@ -402,6 +403,10 @@ LootItem::LootItem(uint32 itemid_, uint32 count_, int32 randomPropertyId_)
 // Basic checks for player/item compatibility - if false no chance to see the item in the loot
 bool LootItem::AllowedForPlayer(Player const* player, WorldObject const* lootTarget) const
 {
+    // player check
+    if (!player || !player->IsInWorld())
+        { return false; }
+
     // DB conditions check
     if (conditionId && !sObjectMgr.IsPlayerMeetToCondition(conditionId, player, player->GetMap(), lootTarget, CONDITION_FROM_LOOT))
         { return false; }
@@ -471,7 +476,7 @@ void Loot::AddItem(LootStoreItem const& item)
         if (m_questItems.size() < MAX_NR_QUEST_ITEMS)
             { m_questItems.push_back(LootItem(item)); }
     }
-    else if (items.size() < MAX_NR_LOOT_ITEMS)              // Non-quest drop
+    else if (items.size() < MAX_NR_LOOT_ITEMS && !DisableMgr::IsDisabledFor(DISABLE_TYPE_ITEM_DROP, item.itemid))              // Non-quest drop
     {
         items.push_back(LootItem(item));
 
@@ -1003,7 +1008,7 @@ bool LootTemplate::LootGroup::HasStartingQuestDropForPlayer(Player const* player
 void LootTemplate::LootGroup::Process(Loot& loot) const
 {
     LootStoreItem const* item = Roll();
-    if (item != NULL)
+    if (item != NULL && !DisableMgr::IsDisabledFor(DISABLE_TYPE_ITEM_DROP, item->itemid))
         { loot.AddItem(*item); }
 }
 
@@ -1101,7 +1106,7 @@ void LootTemplate::Process(Loot& loot, LootStore const& store, bool rate, uint8 
     // Rolling non-grouped items
     for (LootStoreItemList::const_iterator i = Entries.begin() ; i != Entries.end() ; ++i)
     {
-        if (!i->Roll(rate))
+        if (DisableMgr::IsDisabledFor(DISABLE_TYPE_ITEM_DROP, i->itemid) || !i->Roll(rate))
             { continue; }                                       // Bad luck for the entry
 
         if (i->mincountOrRef < 0)                           // References processing

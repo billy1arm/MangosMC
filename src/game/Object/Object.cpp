@@ -162,33 +162,19 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
     if (target == this)                                     // building packet for yourself
         { updateFlags |= UPDATEFLAG_SELF; }
 
-    if (updateFlags & UPDATEFLAG_HAS_POSITION)
+    if (m_isNewObject)
     {
-        // UPDATETYPE_CREATE_OBJECT2 dynamic objects, corpses...
-        if (isType(TYPEMASK_DYNAMICOBJECT) || isType(TYPEMASK_CORPSE) || isType(TYPEMASK_PLAYER))
-            { updatetype = UPDATETYPE_CREATE_OBJECT2; }
-
-        // UPDATETYPE_CREATE_OBJECT2 for pets...
-        if (target->GetPetGuid() == GetObjectGuid())
-            { updatetype = UPDATETYPE_CREATE_OBJECT2; }
-
-        // UPDATETYPE_CREATE_OBJECT2 for some gameobject types...
-        if (isType(TYPEMASK_GAMEOBJECT))
+        switch (GetObjectGuid().GetHigh())
         {
-            switch (((GameObject*)this)->GetGoType())
-            {
-                case GAMEOBJECT_TYPE_TRAP:
-                case GAMEOBJECT_TYPE_DUEL_ARBITER:
-                case GAMEOBJECT_TYPE_FLAGSTAND:
-                case GAMEOBJECT_TYPE_FLAGDROP:
-                    updatetype = UPDATETYPE_CREATE_OBJECT2;
-                    break;
-                case GAMEOBJECT_TYPE_TRANSPORT:
-                    updateFlags |= UPDATEFLAG_TRANSPORT;
-                    break;
-                default:
-                    break;
-            }
+            case HighGuid::HIGHGUID_DYNAMICOBJECT:
+            case HighGuid::HIGHGUID_CORPSE:
+            case HighGuid::HIGHGUID_PLAYER:
+            case HighGuid::HIGHGUID_UNIT:
+            case HighGuid::HIGHGUID_GAMEOBJECT:
+                updatetype = UPDATETYPE_CREATE_OBJECT2;
+                break;
+            default:
+                break;
         }
     }
 
@@ -200,7 +186,6 @@ void Object::BuildCreateUpdateBlockForPlayer(UpdateData* data, Player* target) c
     buf << uint8(m_objectTypeId);
 
     BuildMovementUpdate(&buf, updateFlags);
-
     UpdateMask updateMask;
     updateMask.SetCount(m_valuesCount);
     _SetCreateBits(&updateMask, target);
@@ -251,72 +236,49 @@ void Object::DestroyForPlayer(Player* target) const
 
 void Object::BuildMovementUpdate(ByteBuffer* data, uint8 updateFlags) const
 {
-    uint32 moveFlags = MOVEFLAG_NONE;
+    Unit const* unit = NULL;
+    uint32 highGuid = 0;
+    MovementFlags moveflags = MOVEFLAG_NONE;
 
-    *data << uint8(updateFlags);                            // update flags
+    switch (m_objectTypeId)
+    {
+        case TYPEID_OBJECT:
+        case TYPEID_ITEM:
+        case TYPEID_CONTAINER:
+        case TYPEID_GAMEOBJECT:
+        case TYPEID_DYNAMICOBJECT:
+        case TYPEID_CORPSE:
+            highGuid = uint32(GetObjectGuid().GetHigh());
+            break;
+
+        case TYPEID_PLAYER:
+            // TODO: this code must not be here
+            if (static_cast<Player const*>(this)->GetTransport())
+                ((Unit*)this)->m_movementInfo.AddMovementFlag(MOVEFLAG_ONTRANSPORT);
+            else
+                ((Unit*)this)->m_movementInfo.RemoveMovementFlag(MOVEFLAG_ONTRANSPORT);
+
+        case TYPEID_UNIT:
+            unit = static_cast<Unit const*>(this);
+            moveflags = unit->m_movementInfo.GetMovementFlags();
+            break;
+
+        default:
+            break;
+    }
+
+    *data << uint8(updateFlags);
 
     if (updateFlags & UPDATEFLAG_LIVING)
     {
-        if (m_objectTypeId == TYPEID_PLAYER && ((Player*)this)->GetTransport())
+        MANGOS_ASSERT(unit);
+        if (unit->IsStopped() && unit->m_movementInfo.HasMovementFlag(MOVEFLAG_SPLINE_ENABLED))
         {
-            moveFlags |= MOVEFLAG_ONTRANSPORT;
+            sLog.outError("%s is not moving but have spline movement enabled!", GetGuidStr().c_str());
+            ((Unit*)this)->m_movementInfo.RemoveMovementFlag(MovementFlags(MOVEFLAG_SPLINE_ENABLED | MOVEFLAG_FORWARD));
         }
 
-        float x;    // not used anywhere
-        if (m_objectTypeId == TYPEID_UNIT && ((Unit*)this)->movespline && ((Unit*)this)->GetMotionMaster()->GetDestination(x, x, x))
-        {
-            moveFlags |= MOVEFLAG_WALK_MODE | MOVEFLAG_FORWARD | MOVEFLAG_SPLINE_ENABLED;
-        }
-
-        *data << uint32(moveFlags);                         // movement flags
-        *data << uint32(WorldTimer::getMSTime());           // time (in milliseconds)
-    }
-
-    if (updateFlags & UPDATEFLAG_HAS_POSITION)              // 0x40
-    {
-        if (m_objectTypeId == TYPEID_PLAYER && ((Player*)this)->GetTransport())
-        {
-            *data << float(((Player*)this)->GetTransport()->GetPositionX());
-            *data << float(((Player*)this)->GetTransport()->GetPositionY());
-            *data << float(((Player*)this)->GetTransport()->GetPositionZ());
-            *data << float(((Player*)this)->GetTransport()->GetOrientation());
-
-            *data << ObjectGuid(((Player*)this)->GetTransport()->GetObjectGuid());
-            *data << float(((Player*)this)->GetTransOffsetX());
-            *data << float(((Player*)this)->GetTransOffsetY());
-            *data << float(((Player*)this)->GetTransOffsetZ());
-            *data << float(((Player*)this)->GetTransOffsetO());
-        }
-        else if (GetObjectGuid().GetHigh() == HIGHGUID_TRANSPORT)
-        {
-            *data << float(0);
-            *data << float(0);
-            *data << float(0);
-            *data << float(((WorldObject*)this)->GetOrientation());
-        }
-        else
-        {
-            *data << float(((WorldObject*)this)->GetPositionX());
-            *data << float(((WorldObject*)this)->GetPositionY());
-            *data << float(((WorldObject*)this)->GetPositionZ());
-            *data << float(((WorldObject*)this)->GetOrientation());
-        }
-    }
-
-    if (updateFlags & UPDATEFLAG_LIVING)                    // 0x20
-    {
-        Unit* unit = ((Unit*)this);
-
-        *data << (float)0;
-
-        if (moveFlags & 0x02000)                            // update self MOVEFLAG_FALLING
-        {
-            *data << (float)0;
-            *data << (float)1.0;
-            *data << (float)0;
-            *data << (float)0;
-        }
-
+        *data << unit->m_movementInfo;
         // Unit speeds
         *data << float(unit->GetSpeed(MOVE_WALK));
         *data << float(unit->GetSpeed(MOVE_RUN));
@@ -325,25 +287,33 @@ void Object::BuildMovementUpdate(ByteBuffer* data, uint8 updateFlags) const
         *data << float(unit->GetSpeed(MOVE_SWIM_BACK));
         *data << float(unit->GetSpeed(MOVE_TURN_RATE));
 
-        if (m_objectTypeId == TYPEID_UNIT)
-        {
-            if (moveFlags & MOVEFLAG_SPLINE_ENABLED && ((Unit*)this)->movespline)        // 0x00400000
-            {
-                Movement::PacketBuilder::WriteCreate((*((Unit*)this)->movespline), *data);
-            }
-        }
+        if (unit->m_movementInfo.HasMovementFlag(MOVEFLAG_SPLINE_ENABLED))
+            Movement::PacketBuilder::WriteCreate(*unit->movespline, *data);
+    }
+    else if (updateFlags & UPDATEFLAG_HAS_POSITION)
+    {
+        *data << ((WorldObject*)this)->GetPositionX();
+        *data << ((WorldObject*)this)->GetPositionY();
+        *data << ((WorldObject*)this)->GetPositionZ();
+        *data << ((WorldObject*)this)->GetOrientation();
     }
 
-    if (updateFlags & UPDATEFLAG_ALL)                       // 0x10
-    {
+    if (updateFlags & UPDATEFLAG_HIGHGUID)
+        *data << highGuid;
+
+    if (updateFlags & UPDATEFLAG_ALL)
         *data << (uint32)0x1;
+
+    if (updateFlags & UPDATEFLAG_FULLGUID)
+    {
+        if (unit && unit->getVictim())
+            *data << unit->getVictim()->GetPackGUID();
+        else
+            data->appendPackGUID(0);
     }
 
-    // 0x2
     if (updateFlags & UPDATEFLAG_TRANSPORT)
-    {
-        *data << uint32(WorldTimer::getMSTime());           // ms time
-    }
+        *data << uint32(WorldTimer::getMSTime());
 }
 
 void Object::BuildValuesUpdate(uint8 updatetype, ByteBuffer* data, UpdateMask* updateMask, Player* target) const
@@ -367,29 +337,15 @@ void Object::BuildValuesUpdate(uint8 updatetype, ByteBuffer* data, UpdateMask* u
     MANGOS_ASSERT(updateMask && updateMask->GetCount() == m_valuesCount);
 
     *data << (uint8)updateMask->GetBlockCount();
-    data->append(updateMask->GetMask(), updateMask->GetLength());
-
-    // checking the new bit extraction mechanic
-//#ifdef _DEBUG
-    uint16 ix = 0;
-    for (uint16 i = 0; i < m_valuesCount; i++)
-    {
-        if (updateMask->GetBit(i))
-        {
-            ix = updateMask->GetNextSetIndex(ix);
-            if (i != ix)
-                sLog.outError("ERROR BuildValuesUpdate: new index %u, should be %u for object type %u entry %u", ix, i, GetTypeId(), GetEntry());
-            ++ix;
-        }
-    }
-//#endif
+    updateMask->AppendToPacket(data);
 
     // 2 specialized loops for speed optimization in non-unit case
     if (isType(TYPEMASK_UNIT))                              // unit (creature/player) case
     {
-        uint16 index = 0;
-        while ((index = updateMask->GetNextSetIndex(index)) < m_valuesCount)
+        for (uint16 index = 0; index < m_valuesCount; ++index)
         {
+          if(updateMask->GetBit(index))
+          {
             if (index == UNIT_NPC_FLAGS)
             {
                 uint32 appendValue = m_uint32Values[index];
@@ -436,7 +392,7 @@ void Object::BuildValuesUpdate(uint8 updatetype, ByteBuffer* data, UpdateMask* u
             else if (index == UNIT_DYNAMIC_FLAGS && GetTypeId() == TYPEID_UNIT)
             {
                 uint32 send_value = m_uint32Values[index];
-                
+
                 /* Initiate pointer to creature so we can check loot */
                 if (Creature* my_creature = (Creature*)this)
                     /* If the creature is NOT fully looted */
@@ -485,14 +441,15 @@ void Object::BuildValuesUpdate(uint8 updatetype, ByteBuffer* data, UpdateMask* u
                 // send in current format (float as float, uint32 as uint32)
                 *data << m_uint32Values[index];
             }
-            ++index;
+          }
         }
     }
     else if (isType(TYPEMASK_GAMEOBJECT))                   // gameobject case
     {
-        uint16 index = 0;
-        while ((index = updateMask->GetNextSetIndex(index)) < m_valuesCount)
+        for (uint16 index = 0; index < m_valuesCount; ++index)
         {
+          if (updateMask->GetBit(index))
+          {
             // send in current format (float as float, uint32 as uint32)
             if (index == GAMEOBJECT_DYN_FLAGS)
             {
@@ -518,17 +475,18 @@ void Object::BuildValuesUpdate(uint8 updatetype, ByteBuffer* data, UpdateMask* u
             }
             else
                 { *data << m_uint32Values[index]; }         // other cases
-            ++index;
+          }
         }
     }
     else                                                    // other objects case (no special index checks)
     {
-        uint16 index = 0;
-        while ((index = updateMask->GetNextSetIndex(index)) < m_valuesCount)
+        for (uint16 index = 0; index < m_valuesCount; ++index)
         {
-            // send in current format (float as float, uint32 as uint32)
-            *data << m_uint32Values[index];
-            ++index;
+            if (updateMask->GetBit(index))
+            {
+                // send in current format (float as float, uint32 as uint32)
+                *data << m_uint32Values[index];
+            }
         }
     }
 }
@@ -978,7 +936,7 @@ void WorldObject::Relocate(float x, float y, float z, float orientation)
     m_position.x = x;
     m_position.y = y;
     m_position.z = z;
-    m_position.o = orientation;
+    m_position.o = MapManager::NormalizeOrientation(orientation);
 
     if (isType(TYPEMASK_UNIT))
         { ((Unit*)this)->m_movementInfo.ChangePosition(x, y, z, orientation); }
@@ -996,7 +954,7 @@ void WorldObject::Relocate(float x, float y, float z)
 
 void WorldObject::SetOrientation(float orientation)
 {
-    m_position.o = orientation;
+    m_position.o = MapManager::NormalizeOrientation(orientation);
 
     if (isType(TYPEMASK_UNIT))
         { ((Unit*)this)->m_movementInfo.ChangeOrientation(orientation); }
@@ -1345,8 +1303,6 @@ void WorldObject::UpdateAllowedPositionZ(float x, float y, float& z, Map* atMap 
                 {
                     if (z > max_z)
                         { z = max_z; }
-                    else if (z < ground_z)
-                        { z = ground_z; }
                 }
             }
             else
@@ -1367,8 +1323,6 @@ void WorldObject::UpdateAllowedPositionZ(float x, float y, float& z, Map* atMap 
                 {
                     if (z > max_z)
                         { z = max_z; }
-                    else if (z < ground_z)
-                        { z = ground_z; }
                 }
             }
             break;
@@ -1571,8 +1525,6 @@ void WorldObject::ResetMap()
     delete elunaEvents;
     elunaEvents = NULL;
 #endif
-
-    m_currMap = NULL;
 }
 
 TerrainInfo const* WorldObject::GetTerrain() const

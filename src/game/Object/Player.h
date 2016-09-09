@@ -814,6 +814,19 @@ struct BGData
     bool m_needSave;                                        ///< true, if saved to DB fields modified after prev. save (marked as "saved" above)
 };
 
+struct TradeStatusInfo
+{
+    TradeStatusInfo() : Status(TRADE_STATUS_BUSY), TraderGuid(), Result(EQUIP_ERR_OK),
+        IsTargetResult(false), ItemLimitCategoryId(0), Slot(0) { }
+
+    TradeStatus Status;
+    ObjectGuid TraderGuid;
+    InventoryResult Result;
+    bool IsTargetResult;
+    uint32 ItemLimitCategoryId;
+    uint8 Slot;
+};
+
 class TradeData
 {
     public:                                                 // constructors
@@ -908,7 +921,7 @@ class Player : public Unit
         void AddToWorld() override;
         void RemoveFromWorld() override;
 
-        bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, AreaTrigger const* at = NULL);
+        bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, bool allowNoDelay = false);
 
         bool TeleportTo(WorldLocation const& loc, uint32 options = 0)
         {
@@ -1097,6 +1110,7 @@ class Player : public Unit
 
         void SetVirtualItemSlot(uint8 i, Item* item);
         void SetSheath(SheathState sheathed) override;      // overwrite Unit version
+        bool ViableEquipSlots(ItemPrototype const* proto, uint8 *viable_slots) const;
         uint8 FindEquipSlot(ItemPrototype const* proto, uint32 slot, bool swap) const;
         uint32 GetItemCount(uint32 item, bool inBankAlso = false, Item* skipItem = NULL) const;
         Item* GetItemByGuid(ObjectGuid guid) const;
@@ -1736,7 +1750,7 @@ class Player : public Unit
 
         uint32 GetBaseDefenseSkillValue() const
         {
-            return GetBaseSkillValue(SKILL_DEFENSE);
+            return GetPureSkillValue(SKILL_DEFENSE);
         }
         uint32 GetBaseWeaponSkillValue(WeaponAttackType attType) const;
 

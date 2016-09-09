@@ -36,7 +36,7 @@ namespace Movement
      * @brief Initializes and launches spline movement
      *
      */
-    class  MoveSplineInit
+    class MoveSplineInit
     {
         public:
 
@@ -53,8 +53,11 @@ namespace Movement
              * @return int32 duration - estimated travel time
              */
             int32 Launch();
-
-            /* Stop any creature movement */
+            
+            /**
+             * @brief Stop any creature movement
+             * 
+             */
             void Stop();
 
             /**
@@ -234,14 +237,15 @@ namespace Movement
                 path.setPathLengthLimit(maxPathRange);
             }
             path.calculate(dest.x, dest.y, dest.z, forceDestination);
-            MovebyPath(path.getPath());
+            if (!(path.getPathType() & PATHFIND_NOPATH))
+            {
+                MovebyPath(path.getPath());
+                return;
+            }
         }
-        else
-        {
-            args.path_Idx_offset = 0;
-            args.path.resize(2);
-            args.path[1] = dest;
-        }
+        args.path_Idx_offset = 0;
+        args.path.resize(2);
+        args.path[1] = dest;
     }
 
     /**
