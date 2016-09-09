@@ -1,12 +1,16 @@
-[![](https://www.getmangos.eu/images/primus/blue/misc/logo.png)](http://www.getmangos.eu)&nbsp;
-[![](/icons/FORUM.gif)](https://www.getmangos.eu/forum.php)
-[![](/icons/WIKI.gif)](http://github.com/mangoswiki/wiki/wiki)
-[![](/icons/TOOLS.gif)](http://github.com/mangostools)
-[![](/icons/TRACKER.gif)](https://www.getmangos.eu/project.php)
-[![Build status](https://travis-ci.org/mangoszero/server.png)][16]
+<table border=0 cellpadding=0 cellspacing=0 valign='top'><tr>
+<td><a href='https://getmangos.eu' target='getmangos.eu'><img src='https://www.getmangos.eu/!assets_mangos/logo.png' border=0></a></td>
+<td valign='top'>
+<a href='https://www.getmangos.eu/forum.php' target='getmangos.forum'><img src='https://www.getmangos.eu/wiki/icons/FORUM.gif' border=0></a>
+<a href='https://www.getmangos.eu/wiki' target='getmangos.wiki'><img src='https://www.getmangos.eu/wiki/icons/WIKI.gif' border=0></a>
+<a href='https://www.github.com/mangostools' target='getmangos.tools'><img src='https://www.getmangos.eu/wiki/icons/TOOLS.gif' border=0></a>
+<a href='https://www.getmangos.eu/project.php' target='getmangos.tracker'><img src='https://www.getmangos.eu/wiki/icons/TRACKER.gif' border=0></a>
+<br />Build Status: <br/>Linux 
+<a href='https://travis-ci.org/mangoszero/server/builds' target='MangosZero'><img src='https://travis-ci.org/mangoszero/server.png' border=0></a>
+ Windows 
+<a href='https://ci.appveyor.com/project/MaNGOS/server-9fytl/history' target='MangosZero'><img src='https://ci.appveyor.com/api/projects/status/github/mangoszero/server?branch=develop21&svg=true' border=0></a>
+</td></tr></table>
 
-Mangos
-===
 MC BRANCH
 ===
 ### A World of Warcraft server for WoW  
@@ -54,8 +58,9 @@ Compilers
 Building *Mangos* is currently possible with these compilers:
 
 * **Microsoft Visual Studio (Express[^1])**, 32 bit and 64 bit. Both
-  [Visual Studio][30] and the Express editions of [Visual Studio][31]
-  are supported.
+  [Visual Studio][30] and the Express editions of [Visual Studio][31] are
+  supported. Only Visual Studio 2012 and above are now officially supported.
+
 * **Microsoft Windows SDK**, 32 bit and 64 bit. The [Windows 7 SDK][32] is
   recommended, as older versions lack compiler features required to build
   the server.
@@ -93,7 +98,7 @@ their systems package management instead of source packages.*
   scripting environment, which allows us to make live changes to scripted
   content.
 
-*Recast*, *G3D* and *libmpq* are included in the *Mangos* distribution as
+*ACE*, *Recast*, *G3D* and *libmpq* are included in the *Mangos* distribution as
 we rely on specific versions.
 
 Optional dependencies
@@ -139,7 +144,7 @@ respects for all of the code used other than [OpenSSL][48].
 
 [^1]: Visual Studio Express versions prior to the 2012 release can only
       build 32 bit applications, unless you install the Windows SDK.
-[^2]: Clang support for Windows is experimental. Failure to compile MangosZero
+[^2]: Clang support for Windows is experimental. Failure to compile Mangos
       may also relate to the experimental state of the port.
 
 [1]: http://blizzard.com/ "Blizzard Entertainment Inc. · we love you!"
@@ -150,12 +155,10 @@ respects for all of the code used other than [OpenSSL][48].
 [6]: http://www.wowpedia.org/Patch_1.12.2 "Vanilla WoW · Patch 1.12.2 release notes"
 [7]: http://www.cppreference.com/ "C / C++ reference"
 
-[10]: http://getmangos.eu/ "mangos · project site"
-[12]: http://github.com/mangoszero "mangos-zero · github organization"
-[13]: http://github.com/mangoszero/server "mangos zero · server repository"
-[15]: http://github.com/mangoszero/database "mangos zero · content database repository"
-[16]: https://travis-ci.org/mangoszero/server "Travis CI · mangos-zero build status"
-[17]: https://scan.coverity.com/ "Coverity Scan · Static Code Analysis"
+[10]: https://getmangos.eu/ "mangos · project site"
+[12]: http://github.com/mangoszero "MaNGOS Zero · github organization"
+[13]: http://github.com/mangoszero/server "MaNGOS Zero · server repository"
+[15]: http://github.com/mangoszero/database "MaNGOS Zero · content database repository"
 
 [19]: http://www.cmake.org/ "CMake · Cross Platform Make"
 [20]: http://windows.microsoft.com/ "Microsoft Windows · that OS, yes."

@@ -114,10 +114,6 @@ ID  | Internal Name  | Description
 13  | GNOMISH        | Understood *only* by the Gnome race.
 14  | TROLL          | Understood *only* by the Troll race.
 33  | GUTTERSPEAK    | Understood *only* by the Undead race.
-35  | DRAENEI        | Text in this language is understood ONLY by the Draenai Race.
-36  | ZOMBIE         | (not currently used?)
-37  | GNOMISH BINARY | Binary language used by Alliance when drinking Binary Brew
-38  | GOBLIN BINARY  |  Binary language used by Horce when drinking Binary Brew
 
 Event Types
 ===========
@@ -792,7 +788,7 @@ Sets data for the instance. Note that this will only work when the creature is i
 This is commonly used to link an EventAI script with a existing Script Library C++ Script. You make make things happen like opening doors on specific events that happen.
 
 Field Values:
-These are located in there SD3 Instance File (Example: blackrock_depths.h) And Are Clearly Defined For Specific Events Scripted In The Instance.
+These are located in there SD2 Instance File (Example: blackrock_depths.h) And Are Clearly Defined For Specific Events Scripted In The Instance.
 
 Name        | Value
 ----------- | -----

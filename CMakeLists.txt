@@ -1,7 +1,7 @@
 # MaNGOS is a full featured server for World of Warcraft, supporting
 # the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
 #
-# Copyright (C) 2005-2015  MaNGOS project <http://getmangos.eu>
+# Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 project(MaNGOS)
 set(MANGOS_VERSION 0.21)
 set(MANGOS_EXP "CLASSIC")
-
+add_definitions(-DCLASSIC)
 # CMake policies
 cmake_minimum_required(VERSION 2.8)
 # Until CMake 3.0 is the standard
@@ -73,9 +73,9 @@ message(
     PLAYERBOTS              Enable Player Bots
   To set an option simply type -D<OPTION>=<VALUE> after 'cmake <srcs>'.
   Also, you can specify the generator with -G. see 'cmake --help' for more details
-  For example: cmake .. -DDEBUG=1 -DCMAKE_INSTALL_PREFIX=/opt/mangos"
+  For example: cmake .. -DDEBUG=1 -DCMAKE_INSTALL_PREFIX=/opt/mangos
   
-  Note: On UNIX systems, CONF_DIR is relative to the bin folder.
+  Note: On UNIX systems, CONF_DIR is relative to the bin folder."
 )
 message("")
 
@@ -105,6 +105,9 @@ if(ACE_USE_EXTERNAL)
     endif()
 else()
     include(cmake/ImportACE.cmake)
+    if(NOT(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD"))
+        add_definitions(-DHAVE_ACE_STACK_TRACE_H)
+    endif()
 endif()
 
 if(POSTGRESQL)
@@ -141,6 +144,8 @@ if(GIT_EXECUTABLE)
 else()
     set(GIT_REVISION "Git not found")
 endif()
+
+set(DEFINITIONS ${DEFINITIONS} CLASSIC)
 
 message(STATUS "MaNGOS-Core revision  : ${GIT_REVISION}")
 message(STATUS "Install server to     : ${CMAKE_INSTALL_PREFIX}")
