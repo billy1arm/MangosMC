@@ -122,18 +122,18 @@ void Log::SetColor(bool stdout_stream, Color color)
         FOREGROUND_GREEN,                                   // GREEN
         FOREGROUND_RED | FOREGROUND_GREEN,                  // BROWN
         FOREGROUND_BLUE,                                    // BLUE
-        FOREGROUND_RED | FOREGROUND_BLUE,                   // MAGENTA
+        FOREGROUND_RED |                    FOREGROUND_BLUE,// MAGENTA
         FOREGROUND_GREEN | FOREGROUND_BLUE,                 // CYAN
         FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,// WHITE
         // YELLOW
-        FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY,
+        FOREGROUND_RED | FOREGROUND_GREEN |                   FOREGROUND_INTENSITY,
         // RED_BOLD
-        FOREGROUND_RED | FOREGROUND_INTENSITY,
+        FOREGROUND_RED |                                      FOREGROUND_INTENSITY,
         // GREEN_BOLD
-        FOREGROUND_GREEN | FOREGROUND_INTENSITY,
+        FOREGROUND_GREEN |                   FOREGROUND_INTENSITY,
         FOREGROUND_BLUE | FOREGROUND_INTENSITY,             // BLUE_BOLD
         // MAGENTA_BOLD
-        FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY,
+        FOREGROUND_RED |                    FOREGROUND_BLUE | FOREGROUND_INTENSITY,
         // CYAN_BOLD
         FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY,
         // WHITE_BOLD
@@ -893,32 +893,36 @@ void Log::outWarden(const char* str, ...)
     {
         return;
     }
-
-    if (m_colored)
+    if (m_logLevel >= LOG_LVL_DETAIL)
     {
-        SetColor(true, m_colors[LogNormal]);
+        if (m_colored)
+        {
+            SetColor(true, m_colors[LogNormal]);
+        }
+
+        if (m_includeTime)
+        {
+            outTime();
+        }
+
+        va_list ap;
+
+        va_start(ap, str);
+        vutf8printf(stdout, str, &ap);
+        va_end(ap);
+
+        if (m_colored)
+        {
+            ResetColor(true);
+        }
+
+        printf("\n");
     }
 
-    if (m_includeTime)
+    if (wardenLogfile && m_logFileLevel >= LOG_LVL_DETAIL)
     {
-        outTime();
-    }
+        va_list ap;
 
-    va_list ap;
-
-    va_start(ap, str);
-    vutf8printf(stdout, str, &ap);
-    va_end(ap);
-
-    if (m_colored)
-    {
-        ResetColor(true);
-    }
-
-    printf("\n");
-
-    if (wardenLogfile)
-    {
         outTimestamp(wardenLogfile);
         fprintf(wardenLogfile, "[Warden]: ");
 

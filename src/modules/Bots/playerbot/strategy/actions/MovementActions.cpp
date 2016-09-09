@@ -24,7 +24,7 @@ bool MovementAction::MoveNear(WorldObject* target, float distance)
     distance += target->GetObjectBoundingRadius();
 
     float followAngle = GetFollowAngle();
-    for (float angle = followAngle - (float)M_PI; angle <= followAngle + (float)M_PI; angle += (float)M_PI / 4)
+    for (float angle = followAngle - M_PI; angle <= followAngle + M_PI; angle += M_PI / 4)
     {
         bool moved = MoveTo(target->GetMapId(),
             target->GetPositionX() + cos(angle) * distance,

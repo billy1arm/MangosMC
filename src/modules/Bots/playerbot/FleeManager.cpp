@@ -63,7 +63,7 @@ void FleeManager::calculatePossibleDestinations(list<FleePoint*> &points)
 
 	for (float distance = maxAllowedDistance; distance > sPlayerbotAIConfig.tooCloseDistance + 5.0f; distance -= 5.0f)
 	{
-        for (float angle = -(float)M_PI + followAngle; angle < (float)M_PI + followAngle; angle += (float)M_PI / 16)
+        for (float angle = -M_PI + followAngle; angle < M_PI + followAngle; angle += M_PI / 16)
         {
             float x = botPosX + cos(angle) * distance;
             float y = botPosY + sin(angle) * distance;

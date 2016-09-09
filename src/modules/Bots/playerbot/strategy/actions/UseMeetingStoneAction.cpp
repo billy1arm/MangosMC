@@ -103,7 +103,7 @@ bool SummonAction::Teleport()
     if (!master->IsBeingTeleported())
     {
         float followAngle = GetFollowAngle();
-        for (float angle = followAngle - M_PI; angle <= followAngle + (float)M_PI; angle += (float)M_PI / 4)
+        for (float angle = followAngle - M_PI; angle <= followAngle + M_PI; angle += M_PI / 4)
         {
             uint32 mapId = master->GetMapId();
             float x = master->GetPositionX() + cos(angle) * sPlayerbotAIConfig.followDistance;
