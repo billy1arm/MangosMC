@@ -10,3 +10,6 @@
 [submodule "src/modules/SD3"]
 	path = src/modules/SD3
 	url = https://github.com/mangos/SD3.git
+[submodule "contrib/dbcdocs_editor"]
+	path = contrib/dbcdocs_editor
+	url = https://github.com/mangostools/DbDocsEditor
