@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,12 +28,9 @@
 #include "Common.h"
 #include "ObjectGuid.h"
 #include "WorldPacket.h"
-#include "Opcodes.h"
 #include "Player.h"
 
-#include <list>
 #include <map>
-#include <string>
 
 enum ChatNotify
 {
@@ -71,13 +68,13 @@ enum ChatNotify
     CHAT_PLAYER_INVITED_NOTICE        = 0x1D,               //+ "[%s] You invited %s to join the channel";
     CHAT_PLAYER_INVITE_BANNED_NOTICE  = 0x1E,               //+ "[%s] %s has been banned.";
     CHAT_THROTTLED_NOTICE             = 0x1F,               //+ "[%s] The number of messages that can be sent to this channel is limited, please wait to send another message.";
-#if defined(TBC)
+#if (!defined(CLASSIC))
     CHAT_NOT_IN_AREA_NOTICE           = 0x20,               //+ "[%s] You are not in the correct area for this channel."; -- The user is trying to send a chat to a zone specific channel, and they're not physically in that zone.
     CHAT_NOT_IN_LFG_NOTICE            = 0x21,               //+ "[%s] You must be queued in looking for group before joining this channel."; -- The user must be in the looking for group system to join LFG chat channels.
     CHAT_VOICE_ON_NOTICE              = 0x22,               //+ "[%s] Channel voice enabled by %s.";
     CHAT_VOICE_OFF_NOTICE             = 0x23                //+ "[%s] Channel voice disabled by %s.";
-                                        // 0x24 enable voice?
 #endif
+                                        // 0x24 enable voice?
 };
 
 #if defined(CLASSIC)
@@ -265,7 +262,7 @@ class Channel
         void MakePlayerInvited(WorldPacket* data, const std::string& name);     //+ 0x1D
         void MakePlayerInviteBanned(WorldPacket* data, const std::string& name);//? 0x1E
         void MakeThrottled(WorldPacket* data);                                  //? 0x1F
-#if defined(TBC)
+#if (!defined(CLASSIC))
         void MakeNotInArea(WorldPacket* data);                                  //? 0x20
         void MakeNotInLfg(WorldPacket* data);                                   //? 0x21
         void MakeVoiceOn(WorldPacket* data, ObjectGuid guid);                   //+ 0x22

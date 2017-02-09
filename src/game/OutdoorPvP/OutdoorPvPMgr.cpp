@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -102,10 +102,15 @@ OutdoorPvP* OutdoorPvPMgr::GetScriptOfAffectedZone(uint32 zoneId)
  */
 void OutdoorPvPMgr::HandlePlayerEnterZone(Player* player, uint32 zoneId)
 {
-    if (OutdoorPvP* script = GetScript(zoneId))
+    OutdoorPvP* script = GetScript(zoneId);
+    if (script)
         { script->HandlePlayerEnterZone(player, true); }
-    else if (OutdoorPvP* script = GetScriptOfAffectedZone(zoneId))
-        { script->HandlePlayerEnterZone(player, false); }
+    else
+    {
+        script = GetScriptOfAffectedZone(zoneId);
+        if (script)
+            { script->HandlePlayerEnterZone(player, false); }
+    }
 }
 
 /**
@@ -117,10 +122,15 @@ void OutdoorPvPMgr::HandlePlayerEnterZone(Player* player, uint32 zoneId)
 void OutdoorPvPMgr::HandlePlayerLeaveZone(Player* player, uint32 zoneId)
 {
     // teleport: called once from Player::CleanupsBeforeDelete, once from Player::UpdateZone
-    if (OutdoorPvP* script = GetScript(zoneId))
+    OutdoorPvP* script = GetScript(zoneId);
+    if (script)
         { script->HandlePlayerLeaveZone(player, true); }
-    else if (OutdoorPvP* script = GetScriptOfAffectedZone(zoneId))
-        { script->HandlePlayerLeaveZone(player, false); }
+    else 
+    {
+        script = GetScriptOfAffectedZone(zoneId);
+        if (script)
+            { script->HandlePlayerLeaveZone(player, false); }
+    }
 }
 
 void OutdoorPvPMgr::Update(uint32 diff)

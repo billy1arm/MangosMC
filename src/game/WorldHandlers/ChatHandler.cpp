@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,6 @@
 #include "Opcodes.h"
 #include "ObjectMgr.h"
 #include "Chat.h"
-#include "Database/DatabaseEnv.h"
 #include "ChannelMgr.h"
 #include "Group.h"
 #include "Guild.h"
@@ -96,7 +95,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
     }
     if (langDesc->skill_id != 0 && !_player->HasSkill(langDesc->skill_id))
     {
-#if defined (TBC)
+#if (!defined(CLASSIC))
         // also check SPELL_AURA_COMPREHEND_LANGUAGE (client offers option to speak in that language)
         Unit::AuraList const& langAuras = _player->GetAurasByType(SPELL_AURA_COMPREHEND_LANGUAGE);
         bool foundAura = false;
@@ -113,7 +112,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
 #endif
             SendNotification(LANG_NOT_LEARNED_LANGUAGE);
             return;
-#if defined (TBC)
+#if (!defined(CLASSIC))
         }
 #endif
     }
@@ -228,16 +227,19 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             recv_data >> to;
             recv_data >> msg;
 
-            if (!processChatmessageFurtherAfterSecurityChecks(msg, lang))
-                { return; }
-
             if (msg.empty())
                 { break; }
+
+            if (ChatHandler(this).ParseCommands(msg.c_str()))
+                { break; }
+
+            if (!processChatmessageFurtherAfterSecurityChecks(msg, lang))
+                { return; }
 
             if (!normalizePlayerName(to))
             {
                 SendPlayerNotFoundNotice(to);
-                break;
+                { break; }
             }
 
             Player* player = sObjectMgr.GetPlayer(to.c_str());
@@ -615,16 +617,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
                     if (!sEluna->OnChat(GetPlayer(), type, lang, msg, chn))
                         return;
 #endif /* ENABLE_ELUNA */
-
-                    chn->Say(_player, msg.c_str(), lang); 
-                }
-            }
-
 #ifdef ENABLE_PLAYERBOTS
-            if (ChannelMgr* cMgr = channelMgr(_player->GetTeam()))
-            {
-                if (Channel* chn = cMgr->GetChannel(channel, _player))
-                {
                     if (_player->GetPlayerbotMgr() && chn->GetFlags() & 0x18)
                     {
                         _player->GetPlayerbotMgr()->HandleCommand(type, msg);
@@ -634,7 +627,6 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
                     chn->Say(_player, msg.c_str(), lang); 
                 }
             }
-
         } break;
 
         case CHAT_MSG_AFK:
@@ -814,15 +806,16 @@ void WorldSession::HandleTextEmoteOpcode(WorldPacket& recv_data)
 void WorldSession::HandleChatIgnoredOpcode(WorldPacket& recv_data)
 {
     ObjectGuid iguid;
-#if defined (TBC)
+#if (!defined(CLASSIC))
     uint8 unk;
 #endif
     // DEBUG_LOG("WORLD: Received opcode CMSG_CHAT_IGNORED");
 
     recv_data >> iguid;
-#if defined (TBC)
+#if (!defined(CLASSIC))
     recv_data >> unk;                                       // probably related to spam reporting
 #endif
+
     Player* player = sObjectMgr.GetPlayer(iguid);
     if (!player || !player->GetSession())
         { return; }
@@ -845,18 +838,17 @@ void WorldSession::SendWrongFactionNotice()
     SendPacket(&data);
 }
 
-#if defined (CLASSIC)
+#if defined(CLASSIC)
 void WorldSession::SendChatRestrictedNotice()
-{
-    WorldPacket data(SMSG_CHAT_RESTRICTED, 0);
-    SendPacket(&data);
-}
-#endif
-#if defined (TBC)
+#else
 void WorldSession::SendChatRestrictedNotice(ChatRestrictionType restriction)
+#endif
 {
+#if defined(CLASSIC)
+    WorldPacket data(SMSG_CHAT_RESTRICTED, 0);
+#else
     WorldPacket data(SMSG_CHAT_RESTRICTED, 1);
     data << uint8(restriction);
+#endif
     SendPacket(&data);
 }
-#endif

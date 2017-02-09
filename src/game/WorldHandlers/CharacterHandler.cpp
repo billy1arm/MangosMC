@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -302,10 +302,10 @@ void WorldSession::HandleCharEnumOpcode(WorldPacket & /*recv_data*/)
 {
     /// get all the data necessary for loading all characters (along with their pets) on the account
     CharacterDatabase.AsyncPQuery(&chrHandler, &CharacterHandler::HandleCharEnumCallback, GetAccountId(),
-#if defined(TBC)
+#if (!defined(CLASSIC))
                                   !sWorld.getConfig(CONFIG_BOOL_DECLINED_NAMES_USED) ?
-                                  //   ------- Query Without Declined Names --------
 #endif
+                                  //   ------- Query Without Declined Names --------
                                   //           0               1                2                3                 4                  5                       6                        7
                                   "SELECT characters.guid, characters.name, characters.race, characters.class, characters.gender, characters.playerBytes, characters.playerBytes2, characters.level, "
                                   //   8                9               10                     11                     12                     13                    14
@@ -313,7 +313,7 @@ void WorldSession::HandleCharEnumOpcode(WorldPacket & /*recv_data*/)
                                   //  15                    16                   17                     18                   19
                                   "characters.at_login, character_pet.entry, character_pet.modelid, character_pet.level, characters.equipmentCache "
                                   "FROM characters LEFT JOIN character_pet ON characters.guid=character_pet.owner AND character_pet.slot='%u' "
-#if defined(TBC)
+#if (!defined(CLASSIC))
                                   "LEFT JOIN guild_member ON characters.guid = guild_member.guid "
                                   "WHERE characters.account = '%u' ORDER BY characters.guid"
                                   :
@@ -383,7 +383,7 @@ void WorldSession::HandleCharCreateOpcode(WorldPacket& recv_data)
         return;
     }
 
-#if defined(TBC)
+#if (!defined(CLASSIC))
     // prevent character creating Expansion race without Expansion account
     if (raceEntry->expansion > Expansion())
     {
@@ -393,7 +393,6 @@ void WorldSession::HandleCharCreateOpcode(WorldPacket& recv_data)
         return;
     }
 #endif
-
     // prevent character creating with invalid name
     if (!normalizePlayerName(name))
     {
@@ -561,7 +560,7 @@ void WorldSession::HandleCharDeleteOpcode(WorldPacket& recv_data)
         return;
     }
 
-#if defined(TBC)
+#if (!defined(CLASSIC))
     // is arena team captain
     if (sObjectMgr.GetArenaTeamByCaptain(guid))
     {
@@ -663,7 +662,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
 
     /* Validation check completely, assign player to WorldSession::_player for later use */
     SetPlayer(pCurrChar);
-#if defined(TBC)
+#if (!defined(CLASSIC))
     pCurrChar->SendDungeonDifficulty(false);
 #endif
 
@@ -794,7 +793,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
             SendPacket(&data);
             DEBUG_LOG("WORLD: Sent guild-motd (SMSG_GUILD_EVENT)");
 
-#if defined(TBC)
+#if (!defined(CLASSIC))
             guild->DisplayGuildBankTabsInfo(this);
 #endif
             /* Let everyone in the guild know you've just signed in */
@@ -845,7 +844,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
         MapEntry const* mapEntry = sMapStore.LookupEntry(pCurrChar->GetMapId());
         if (!mapEntry)
             { lockStatus = AREA_LOCKSTATUS_UNKNOWN_ERROR; }
-#if defined(TBC)
+#if (!defined(CLASSIC))
         else if (pCurrChar->GetSession()->Expansion() < mapEntry->Expansion())
             lockStatus = AREA_LOCKSTATUS_INSUFFICIENT_EXPANSION;
 #endif
@@ -875,11 +874,9 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
 #if defined(CLASSIC)
     pCurrChar->GetSocial()->SendFriendList();
     pCurrChar->GetSocial()->SendIgnoreList();
-#endif
-#if defined(TBC)
+#else
     pCurrChar->GetSocial()->SendSocialList();
 #endif
-
     /* Send packets that must be sent only after player is added to the map */
     pCurrChar->SendInitialPacketsAfterAddToMap();
 
@@ -1037,7 +1034,7 @@ void WorldSession::HandleSetFactionAtWarOpcode(WorldPacket& recv_data)
     GetPlayer()->GetReputationMgr().SetAtWar(repListID, flag);
 }
 
-#if defined(TBC)
+#if (!defined(CLASSIC))
 void WorldSession::HandleMeetingStoneInfoOpcode(WorldPacket & /*recv_data*/)
 {
     DEBUG_LOG("WORLD: Received CMSG_MEETING_STONE_INFO");
@@ -1047,7 +1044,6 @@ void WorldSession::HandleMeetingStoneInfoOpcode(WorldPacket & /*recv_data*/)
     SendPacket(&data);
 }
 #endif
-
 void WorldSession::HandleTutorialFlagOpcode(WorldPacket& recv_data)
 {
     uint32 iFlag;
@@ -1182,7 +1178,7 @@ void WorldSession::HandleChangePlayerNameOpcodeCallBack(QueryResult* result, uin
 
     CharacterDatabase.BeginTransaction();
     CharacterDatabase.PExecute("UPDATE characters set name = '%s', at_login = at_login & ~ %u WHERE guid ='%u'", newname.c_str(), uint32(AT_LOGIN_RENAME), guidLow);
-#if defined(TBC)
+#if (!defined(CLASSIC))
     CharacterDatabase.PExecute("DELETE FROM character_declinedname WHERE guid ='%u'", guidLow);
 #endif
     CharacterDatabase.CommitTransaction();
@@ -1197,8 +1193,7 @@ void WorldSession::HandleChangePlayerNameOpcodeCallBack(QueryResult* result, uin
 
     sWorld.InvalidatePlayerDataToAllClient(guid);
 }
-
-#if defined(TBC)
+#if (!defined(CLASSIC))
 void WorldSession::HandleSetPlayerDeclinedNamesOpcode(WorldPacket& recv_data)
 {
     ObjectGuid guid;

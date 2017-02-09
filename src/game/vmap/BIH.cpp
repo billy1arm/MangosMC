@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -154,14 +154,14 @@ void BIH::subdivide(int left, int right, std::vector<uint32>& tempTree, buildDat
         else if (left > right)
         {
             // all right
+            right = rightOrig;
             if (prevAxis == axis && G3D::fuzzyEq(prevSplit, split))
             {
                 // we are stuck here - create a leaf
-                stats.updateLeaf(depth, right - left + 1);
-                createNode(tempTree, nodeIndex, left, right);
+                stats.updateLeaf(depth, rightOrig - left + 1);
+                createNode(tempTree, nodeIndex, left, rightOrig);
                 return;
             }
-            right = rightOrig;
             if (clipR >= split)
             {
                 // keep looping on right half

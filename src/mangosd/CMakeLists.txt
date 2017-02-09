@@ -1,7 +1,7 @@
 # MaNGOS is a full featured server for World of Warcraft, supporting
 # the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
 #
-# Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+# Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -153,7 +153,15 @@ endif()
 set_target_properties(${EXECUTABLE_NAME} PROPERTIES LINK_FLAGS "${EXECUTABLE_LINK_FLAGS}")
 
 install(TARGETS ${EXECUTABLE_NAME} DESTINATION "${BIN_DIR}")
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mangosd.conf.dist.in ${CMAKE_CURRENT_BINARY_DIR}/mangosd.conf.dist)
+#if defined(CLASSIC)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mangos0.conf.dist.in ${CMAKE_CURRENT_BINARY_DIR}/mangosd.conf.dist)
+#elseif defined(TBC)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mangos1.conf.dist.in ${CMAKE_CURRENT_BINARY_DIR}/mangosd.conf.dist)
+#elseif defined(WOTLK)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mangos2.conf.dist.in ${CMAKE_CURRENT_BINARY_DIR}/mangosd.conf.dist)
+#elseif defined(CATA)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mangos3.conf.dist.in ${CMAKE_CURRENT_BINARY_DIR}/mangosd.conf.dist)
+#endif
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mangosd.conf.dist DESTINATION ${CONF_INSTALL_DIR})
 
 if(WIN32 AND MSVC)

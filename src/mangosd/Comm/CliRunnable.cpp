@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -487,13 +487,15 @@ bool ChatHandler::HandleAccountCreateCommand(char* args)
     std::string password = szPassword;
 
     AccountOpResult result;
-#if defined(TBC)
+    // Only Include the expansion flag for TBC and beyond
+#if (!defined(CLASSIC))
     uint32 expansion = 0;
     if(ExtractUInt32(&args, expansion))
-        result = sAccountMgr.CreateAccount(account_name, password, expansion);
+        { result = sAccountMgr.CreateAccount(account_name, password, expansion); }
     else
 #endif
-    result = sAccountMgr.CreateAccount(account_name, password);
+        { result = sAccountMgr.CreateAccount(account_name, password); }
+
     switch (result)
     {
         case AOR_OK:

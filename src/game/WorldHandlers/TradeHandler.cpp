@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,6 @@
 #include "Item.h"
 #include "Spell.h"
 #include "SocialMgr.h"
-#include "Language.h"
 #include "DBCStores.h"
 
 void WorldSession::SendTradeStatus(const TradeStatusInfo& info)
@@ -45,10 +44,10 @@ void WorldSession::SendTradeStatus(const TradeStatusInfo& info)
     {
         case TRADE_STATUS_BEGIN_TRADE:
             data << info.TraderGuid;                        // CGTradeInfo::m_tradingPlayer
-            break;
 #if defined(TBC)
             data << uint32(0);                              // added in 2.4.0
 #endif
+            break;
         case TRADE_STATUS_CLOSE_WINDOW:
             data << uint32(info.Result);                    // InventoryResult
             data << uint8(info.IsTargetResult);             // bool isTargetError; used for: EQUIP_ERR_BAG_FULL, EQUIP_ERR_CANT_CARRY_MORE_OF_THIS, EQUIP_ERR_MISSING_REAGENT, EQUIP_ERR_ITEM_MAX_LIMIT_CATEGORY_COUNT_EXCEEDED

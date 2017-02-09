@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,6 @@
 #include "GridDefines.h"
 #include "World.h"
 #include "CellImpl.h"
-#include "Corpse.h"
 #include "ObjectMgr.h"
 
 #define CLASS_LOCK MaNGOS::ClassLevelLockable<MapManager, ACE_Recursive_Thread_Mutex>
@@ -61,7 +60,7 @@ MapManager::Initialize()
     int num_threads(sWorld.getConfig(CONFIG_UINT32_NUMTHREADS));
     // Start mtmaps if needed.
     if (num_threads > 0 && m_updater.activate(num_threads) == -1)
-        abort();
+      {  abort(); }
 
     InitStateMachine();
     InitMaxInstanceId();
@@ -115,7 +114,8 @@ Map* MapManager::CreateMap(uint32 id, const WorldObject* obj)
         // create DungeonMap object
         m = CreateInstance(id, (Player*)obj);
         // Load active objects for this map
-        sObjectMgr.LoadActiveEntities(m);
+        if (m != NULL)
+          { LoadActiveEntities(m); }
     }
     else
     {
@@ -126,6 +126,8 @@ Map* MapManager::CreateMap(uint32 id, const WorldObject* obj)
             m = new WorldMap(id, i_gridCleanUpDelay);
             // add map into container
             i_maps[MapID(id)] = m;
+
+            LoadActiveEntities(m);
 
             // non-instanceable maps always expected have saved state
             m->CreateInstanceData(true);
@@ -188,13 +190,13 @@ void MapManager::Update(uint32 diff)
     for (MapMapType::iterator iter=i_maps.begin(); iter != i_maps.end(); ++iter)
     {
         if (m_updater.activated())
-            m_updater.schedule_update(*iter->second, (uint32)i_timer.GetCurrent());
+          {  m_updater.schedule_update(*iter->second, (uint32)i_timer.GetCurrent()); }
         else
-            iter->second->Update((uint32)i_timer.GetCurrent());
+          { iter->second->Update((uint32)i_timer.GetCurrent()); }
     }
 
     if (m_updater.activated())
-        m_updater.wait();
+      {  m_updater.wait(); }
 
     for (TransportSet::iterator iter = m_Transports.begin(); iter != m_Transports.end(); ++iter)
     {
@@ -259,7 +261,7 @@ void MapManager::UnloadAll()
     TerrainManager::Instance().UnloadAll();
 
     if (m_updater.activated())
-        m_updater.deactivate();
+      { m_updater.deactivate(); }
 }
 
 void MapManager::InitMaxInstanceId()
@@ -390,3 +392,51 @@ BattleGroundMap* MapManager::CreateBattleGroundMap(uint32 id, uint32 InstanceId,
 
     return map;
 }
+#if defined(CLASSIC)
+void MapManager::LoadContinents()
+{
+    uint32 continents[] = {0, 1};
+    Map* _map = NULL;
+
+    for (uint8 i = 0; i < countof(continents); ++i)
+    {
+        _map = sMapMgr.FindMap(continents[i]);
+
+        if (!_map)
+          { _map = sMapMgr.CreateMap(continents[i], NULL); }
+
+        if (!_map)
+          { sLog.outError("MapManager::LoadContinents() - Unable to create map %u", continents[i]); }
+    }
+
+    return;
+}
+
+void MapManager::LoadActiveEntities(Map* m)
+{
+
+    // Create all local transporters for this map
+    m->LoadLocalTransports();
+
+    // Load grids for all objects on this map, if configured so
+    if (sWorld.isForceLoadMap(m->GetId()))
+    {
+        for (CreatureDataMap::const_iterator itr = sObjectMgr.GetCreatureDataMap()->begin(); itr != sObjectMgr.GetCreatureDataMap()->end(); ++itr)
+        {
+            if (itr->second.mapid == m->GetId())
+            {
+                m->ForceLoadGrid(itr->second.posX, itr->second.posY);
+            }
+        }
+    }
+    else // Normal case - load only grids for npcs that are active
+    {
+        std::pair<ActiveCreatureGuidsOnMap::const_iterator, ActiveCreatureGuidsOnMap::const_iterator> bounds = sObjectMgr.GetActiveCreatureGuids()->equal_range(m->GetId());
+        for (ActiveCreatureGuidsOnMap::const_iterator itr = bounds.first; itr != bounds.second; ++itr)
+        {
+            CreatureData const* data = sObjectMgr.GetCreatureData(itr->second);
+            m->ForceLoadGrid(data->posX, data->posY);
+        }
+    }
+}
+#endif

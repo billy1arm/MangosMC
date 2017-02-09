@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,14 +26,18 @@
 #define MANGOS_SYSTEMCONFIG_H
 
 #ifndef MANGOS_PACKAGENAME
-#define MANGOS_PACKAGENAME "MaNGOS mc"
+ #if defined(CLASSIC)
+  #define MANGOS_PACKAGENAME "MaNGOS Zero"
+ #elif defined(TBC)
+  #define MANGOS_PACKAGENAME "MaNGOS One"
+ #endif
 #endif
 
 #include "Platform/Define.h"
 
 #ifndef MANGOS_VERSION
 #if PLATFORM == PLATFORM_WINDOWS
-# define MANGOS_VERSION(REVD,REVT,REVN,REVH) "0.22.0" " (" REVD " " REVT " Revision " REVN " - " REVH ")"
+# define MANGOS_VERSION(REVD,REVT,REVN,REVH) "0.21.0" " (" REVD " " REVT " Revision " REVN " - " REVH ")"
 #else
 # define MANGOS_VERSION(REVD,REVT,REVN,REVH) "@VERSION@" " (" REVD " " REVT " Revision " REVN " - " REVH ")"
 #endif
@@ -42,7 +46,11 @@
 // Format is YYYYMMDDRR where RR is the change in the conf file
 // for that day.
 #ifndef MANGOSD_CONFIG_VERSION
-# define MANGOSD_CONFIG_VERSION 2016031901
+ #if defined(CLASSIC)
+  # define MANGOSD_CONFIG_VERSION 2017011200
+ #elif defined(TBC)
+  # define MANGOSD_CONFIG_VERSION 2016070401
+ #endif
 #endif
 #ifndef REALMD_CONFIG_VERSION
 # define REALMD_CONFIG_VERSION 2010062001

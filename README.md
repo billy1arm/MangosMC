@@ -1,10 +1,10 @@
 <table border=0 cellpadding=0 cellspacing=0 valign='top'><tr>
-<td><a href='https://getmangos.eu' target='getmangos.eu'><img src='https://www.getmangos.eu/!assets_mangos/logo.png' border=0></a></td>
+<td><a href='https://www.getmangos.eu' target='getmangos.eu'><img src='https://www.getmangos.eu/!assets_mangos/logo.png' border=0></a></td>
 <td valign='top'>
-<a href='https://www.getmangos.eu/forum.php' target='getmangos.forum'><img src='https://www.getmangos.eu/wiki/icons/FORUM.gif' border=0></a>
-<a href='https://www.getmangos.eu/wiki' target='getmangos.wiki'><img src='https://www.getmangos.eu/wiki/icons/WIKI.gif' border=0></a>
-<a href='https://www.github.com/mangostools' target='getmangos.tools'><img src='https://www.getmangos.eu/wiki/icons/TOOLS.gif' border=0></a>
-<a href='https://www.getmangos.eu/project.php' target='getmangos.tracker'><img src='https://www.getmangos.eu/wiki/icons/TRACKER.gif' border=0></a>
+<a href='https://www.getmangos.eu/forums/' target='getmangos.forum'><img src='/icons/FORUM.gif' border=0></a>
+<a href='https://www.getmangos.eu/wiki' target='getmangos.wiki'><img src='/icons/WIKI.gif' border=0></a>
+<a href='https://www.getmangos.eu/github-activity/' target='getmangos.activity'><img src='/icons/ACTIVITY.gif' border=0></a>
+<a href='https://www.getmangos.eu/bug-tracker/mangos-zero/' target='getmangos.tracker'><img src='/icons/TRACKER.gif' border=0></a>
 <br />Build Status: <br/>Linux 
 <a href='https://travis-ci.org/mangoszero/server/builds' target='MangosZero'><img src='https://travis-ci.org/mangoszero/server.png' border=0></a>
  Windows 
@@ -159,6 +159,8 @@ respects for all of the code used other than [OpenSSL][48].
 [12]: http://github.com/mangoszero "MaNGOS Zero · github organization"
 [13]: http://github.com/mangoszero/server "MaNGOS Zero · server repository"
 [15]: http://github.com/mangoszero/database "MaNGOS Zero · content database repository"
+[16]: https://travis-ci.org/mangoszero/server "Travis CI . MaNGOS Zero build status"
+[17]: https://scan.coverity.com/ "Coverity Scan · Static Code Analysis"
 
 [19]: http://www.cmake.org/ "CMake · Cross Platform Make"
 [20]: http://windows.microsoft.com/ "Microsoft Windows · that OS, yes."

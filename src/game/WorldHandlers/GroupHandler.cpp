@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -88,7 +88,11 @@ void WorldSession::HandleGroupInviteOpcode(WorldPacket& recv_data)
 
     if (GetPlayer()->GetInstanceId() != 0 && player->GetInstanceId() != 0 && GetPlayer()->GetInstanceId() != player->GetInstanceId() && GetPlayer()->GetMapId() == player->GetMapId())
     {
-        SendPartyResult(PARTY_OP_INVITE, membername, ERR_ALREADY_IN_GROUP_S); // error message is not so appropriated but no other option for classic
+#if defined(CLASSIC)
+        SendPartyResult(PARTY_OP_INVITE, membername, ERR_ALREADY_IN_GROUP_S); // error message is inappropriate but no other option for classic
+#else
+        SendPartyResult(PARTY_OP_INVITE, membername, ERR_TARGET_NOT_IN_INSTANCE_S);
+#endif
         return;
     }
 
@@ -336,7 +340,11 @@ void WorldSession::HandleGroupDisbandOpcode(WorldPacket& /*recv_data*/)
 
     if (_player->InBattleGround())
     {
-        SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);  // error message is not so appropriated but no other option for classic
+#if defined(CLASSIC)
+        SendPartyResult(PARTY_OP_INVITE, "", ERR_NOT_LEADER);  // error message is inappropriate but no other option for classic
+#else
+        SendPartyResult(PARTY_OP_INVITE, "", ERR_INVITE_RESTRICTED);
+#endif
         return;
     }
 
@@ -693,6 +701,9 @@ void WorldSession::BuildPartyMemberStatsChangedPacket(Player* player, WorldPacke
             if (auramask & (uint64(1) << i))
             {
                 *data << uint16(player->GetUInt32Value(UNIT_FIELD_AURA + i));
+#if (!defined(CLASSIC))
+                *data << uint8(1);
+#endif
             }
         }
     }
@@ -769,6 +780,9 @@ void WorldSession::BuildPartyMemberStatsChangedPacket(Player* player, WorldPacke
                 if (auramask & (uint64(1) << i))
                 {
                     *data << uint16(pet->GetUInt32Value(UNIT_FIELD_AURA + i));
+#if (!defined(CLASSIC))
+                    *data << uint8(1);
+#endif
                 }
             }
         }
@@ -850,6 +864,9 @@ void WorldSession::HandleRequestPartyMemberStatsOpcode(WorldPacket& recv_data)
         {
             auramask |= (uint32(1) << i);
             data << uint16(aura);
+#if (!defined(CLASSIC))
+            data << uint8(1);
+#endif
         }
     }
     data.put<uint32>(maskPos, auramask);                    // GROUP_UPDATE_FLAG_AURAS
@@ -875,6 +892,9 @@ void WorldSession::HandleRequestPartyMemberStatsOpcode(WorldPacket& recv_data)
             {
                 petauramask |= (uint32(1) << i);
                 data << uint16(petaura);
+#if (!defined(CLASSIC))
+                data << uint8(1);
+#endif
             }
         }
         data.put<uint32>(petMaskPos, petauramask);          // GROUP_UPDATE_FLAG_PET_AURAS

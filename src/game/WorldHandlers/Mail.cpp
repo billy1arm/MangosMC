@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -312,7 +312,7 @@ void MailDraft::SendMailTo(MailReceiver const& receiver, MailSender const& sende
     // expire time if COD 3 days, if no COD 30 days, if auction sale pending 1 hour
     uint32 expire_delay;
 
-    // auction mail without any items and money
+    // auction mail without any items and money (auction sale note) pending 1 hour
     if (sender.GetMailMessageType() == MAIL_AUCTION && m_items.empty() && !m_money)
     {
         expire_delay = HOUR;
@@ -322,7 +322,7 @@ void MailDraft::SendMailTo(MailReceiver const& receiver, MailSender const& sende
     {
         expire_delay = DAY;
     }
-    // TODO: GameMaster expire timer (90 Days)
+    // default case: expire time if COD 3 days, if no COD 30 days
     else
     {
         if (m_COD)

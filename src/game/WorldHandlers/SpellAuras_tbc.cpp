@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@
 #include "WorldSession.h"
 #include "Opcodes.h"
 #include "Log.h"
-#include "UpdateMask.h"
 #include "World.h"
 #include "ObjectMgr.h"
 #include "SpellMgr.h"
@@ -42,7 +41,6 @@
 #include "Policies/Singleton.h"
 #include "Totem.h"
 #include "Creature.h"
-#include "Formulas.h"
 #include "BattleGround/BattleGround.h"
 #include "OutdoorPvP/OutdoorPvP.h"
 #include "CreatureAI.h"
@@ -2901,18 +2899,7 @@ void Aura::HandleAuraModShapeshift(bool apply, bool Real)
     else
     {
         if (modelid > 0)
-        {
-            // workaround for tauren scale appear too big
-            if (target->getRace() == RACE_TAUREN)
-            {
-                if (target->getGender() == GENDER_MALE)
-                    target->SetObjectScale(DEFAULT_TAUREN_MALE_SCALE);
-                else
-                    target->SetObjectScale(DEFAULT_TAUREN_FEMALE_SCALE);
-            }
-
-            target->SetDisplayId(target->GetNativeDisplayId());
-        }
+            { target->SetDisplayId(target->GetNativeDisplayId()); }
 
         if (target->getClass() == CLASS_DRUID)
             { target->SetPowerType(POWER_MANA); }
@@ -3800,7 +3787,7 @@ void Aura::HandleModStealth(bool apply, bool Real)
                 for (Unit::AuraList::const_iterator i = mDummyAuras.begin(); i != mDummyAuras.end(); ++i)
                 {
                     // Master of Subtlety
-                    if ((*i)->GetSpellProto()->SpellIconID == 2114)
+                    if ((*i)->GetSpellProto()->SpellIconID == 2114 && GetSpellProto()->SpellFamilyName == SPELLFAMILY_ROGUE)
                     {
                         target->RemoveAurasDueToSpell(31666);
                         int32 bp = (*i)->GetModifier()->m_amount;
@@ -5823,7 +5810,13 @@ void Aura::HandleSpiritOfRedemption(bool apply, bool Real)
                 { target->SetStandState(UNIT_STAND_STATE_STAND); }
         }
 
-        target->SetHealth(1);
+        // interrupt casting when entering Spirit of Redemption  
+        if (target->IsNonMeleeSpellCasted(false))  
+            { target->InterruptNonMeleeSpells(false); }
+   
+        // set health and mana to maximum  
+        target->SetHealth(target->GetMaxHealth());  
+        target->SetPower(POWER_MANA, target->GetMaxPower(POWER_MANA));  
     }
     // die at aura end
     else
@@ -5866,7 +5859,7 @@ void Aura::HandleSchoolAbsorb(bool apply, bool Real)
                     break;
                 case SPELLFAMILY_WARLOCK:
                     // Shadow Ward
-                    if (spellProto->SpellFamilyFlags == UI64LIT(0x00))
+                    if (!spellProto->SpellFamilyFlags)
                         //+10% from +spell bonus
                         { DoneActualBenefit = caster->SpellBaseDamageBonusDone(GetSpellSchoolMask(spellProto)) * 0.1f; }
                     break;
@@ -5904,7 +5897,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune (not use charges)
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             // some auras remove at specific health level or more
@@ -6034,7 +6027,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             uint32 absorb = 0;
@@ -6205,7 +6198,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune (not use charges)
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             // ignore non positive values (can be result apply spellmods to aura damage
@@ -6352,7 +6345,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune (not use charges)
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             int32 pdamage = m_modifier.m_amount > 0 ? m_modifier.m_amount : 0;
@@ -6427,7 +6420,7 @@ void Aura::PeriodicTick()
             // Anger Management
             // amount = 1+ 16 = 17 = 3,4*5 = 10,2*5/3
             // so 17 is rounded amount for 5 sec tick grow ~ 1 range grow in 3 sec
-            if (powerType == POWER_RAGE)
+            if (powerType == POWER_RAGE && target->IsInCombat())
                 { target->ModifyPower(powerType, m_modifier.m_amount * 3 / 5); }
             break;
         }

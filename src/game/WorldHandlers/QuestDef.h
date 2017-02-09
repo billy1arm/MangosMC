@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,14 +28,17 @@
 #include "Platform/Define.h"
 #include "Database/DatabaseEnv.h"
 
-#include <string>
 #include <vector>
 
 class Player;
 
 class ObjectMgr;
 
-#define MAX_QUEST_LOG_SIZE 20
+#if defined(CLASSIC)
+ #define MAX_QUEST_LOG_SIZE 20
+#else
+ #define MAX_QUEST_LOG_SIZE 25
+#endif
 
 #define QUEST_OBJECTIVES_COUNT 4
 #define QUEST_ITEM_OBJECTIVES_COUNT QUEST_OBJECTIVES_COUNT
@@ -46,7 +49,6 @@ class ObjectMgr;
 #define QUEST_REPUTATIONS_COUNT 5
 #define QUEST_EMOTE_COUNT 4
 
-// [-ZERO] need update
 enum QuestFailedReasons
 {
     INVALIDREASON_DONT_HAVE_REQ                       = 0,  // this is default case
@@ -55,9 +57,16 @@ enum QuestFailedReasons
     INVALIDREASON_QUEST_ALREADY_DONE                  = 7,  // You have completed that quest.
     INVALIDREASON_QUEST_ONLY_ONE_TIMED                = 12, // You can only be on one timed quest at a time.
     INVALIDREASON_QUEST_ALREADY_ON                    = 13, // You are already on that quest.
+#if defined(TBC)
+    INVALIDREASON_QUEST_FAILED_EXPANSION              = 16, // This quest requires an expansion enabled account.
+#endif
     INVALIDREASON_QUEST_ALREADY_ON2                   = 18, // You are already on that quest.
     INVALIDREASON_QUEST_FAILED_MISSING_ITEMS          = 21, // You don't have the required items with you. Check storage.
-    INVALIDREASON_QUEST_FAILED_NOT_ENOUGH_MONEY       = 23  // You don't have enough money for that quest.
+    INVALIDREASON_QUEST_FAILED_NOT_ENOUGH_MONEY       = 23, // You don't have enough money for that quest.
+#if defined(TBC)
+    INVALIDREASON_DAILY_QUESTS_REMAINING              = 26, // You have already completed 10 daily quests today.
+    INVALIDREASON_QUEST_FAILED_CAIS                   = 27  // You cannot complete quests once you have reached tired time.
+#endif
 };
 
 enum QuestShareMessages
@@ -89,6 +98,9 @@ enum __QuestTradeSkill
     QUEST_TRSKILL_MINING         = 11,
     QUEST_TRSKILL_FISHING        = 12,
     QUEST_TRSKILL_SKINNING       = 13,
+#if defined(TBC)
+    QUEST_TRSKILL_JEWELCRAFTING  = 14,
+#endif
 };
 
 enum QuestStatus
@@ -109,10 +121,16 @@ enum __QuestGiverStatus
     DIALOG_STATUS_CHAT                     = 2,
     DIALOG_STATUS_INCOMPLETE               = 3,
     DIALOG_STATUS_REWARD_REP               = 4,
+#if defined(CLASSIC)
     DIALOG_STATUS_AVAILABLE                = 5,
     DIALOG_STATUS_REWARD_OLD               = 6,             // red dot on minimap
     DIALOG_STATUS_REWARD2                  = 7,             // yellow dot on minimap
-    // [-ZERO] tbc?  DIALOG_STATUS_REWARD                   = 8              // yellow dot on minimap
+#else
+    DIALOG_STATUS_AVAILABLE_REP            = 5,
+    DIALOG_STATUS_AVAILABLE                = 6,
+    DIALOG_STATUS_REWARD2                  = 7,             // no yellow dot on minimap
+    DIALOG_STATUS_REWARD                   = 8,             // yellow dot on minimap
+#endif
     DIALOG_STATUS_UNDEFINED                = 100            // Used as result for unassigned ScriptCall
 };
 
@@ -128,6 +146,9 @@ enum QuestTypes
     QUEST_TYPE_LEGENDARY           = 83,
     // Escort quest is not listed in QuestInfo.dbc
     QUEST_TYPE_ESCORT              = 84,
+#if defined(TBC)
+    QUEST_TYPE_HEROIC              = 85,
+#endif
 };
 
 enum QuestFlags
@@ -141,10 +162,16 @@ enum QuestFlags
     // QUEST_FLAGS_NONE2        = 0x00000010,               // Not used currently
     QUEST_FLAGS_EPIC           = 0x00000020,                // Not used currently: Unsure of content
     QUEST_FLAGS_RAID           = 0x00000040,                // Not used currently
-
+#if defined(TBC)
+    QUEST_FLAGS_TBC            = 0x00000080,                // Not used currently: Available if TBC expansion enabled only
+#endif
     QUEST_FLAGS_UNK2           = 0x00000100,                // Not used currently: _DELIVER_MORE Quest needs more than normal _q-item_ drops from mobs
     QUEST_FLAGS_HIDDEN_REWARDS = 0x00000200,                // Items and money rewarded only sent in SMSG_QUESTGIVER_OFFER_REWARD (not in SMSG_QUESTGIVER_QUEST_DETAILS or in client quest log(SMSG_QUEST_QUERY_RESPONSE))
     QUEST_FLAGS_AUTO_REWARDED  = 0x00000400,                // These quests are automatically rewarded on quest complete and they will never appear in quest log client side.
+#if defined(TBC)
+    QUEST_FLAGS_TBC_RACES      = 0x00000800,                // Not used currently: Blood elf/Draenei starting zone quests
+    QUEST_FLAGS_DAILY          = 0x00001000,                // Daily quest. Can be done once a day. Quests reset at regular intervals for all players.
+#endif
 };
 
 enum QuestSpecialFlags
@@ -163,6 +190,7 @@ enum QuestSpecialFlags
 
 #define QUEST_SPECIAL_FLAG_DB_ALLOWED (QUEST_SPECIAL_FLAG_REPEATABLE | QUEST_SPECIAL_FLAG_EXPLORATION_OR_EVENT)
 
+#if defined(CLASSIC)
 enum QuestActor
 {
     QA_CREATURE    = 0,
@@ -175,6 +203,7 @@ enum QuestRole
     QR_START = 0,
     QR_END   = 1,
 };
+#endif
 
 struct QuestLocale
 {
@@ -227,7 +256,10 @@ class Quest
         int32  GetNextQuestId() const { return NextQuestId; }
         int32  GetExclusiveGroup() const { return ExclusiveGroup; }
         uint32 GetNextQuestInChain() const { return NextQuestInChain; }
-        // [-ZERO] not exist
+#if defined(TBC)
+        uint32 GetCharTitleId() const { return CharTitleId; }
+        uint32 GetCharTitleBitIndex() const;                // in 2.x in different from 3.x in some quest packets used bit index insed id
+#endif
         uint32 GetSrcItemId() const { return SrcItemId; }
         uint32 GetSrcItemCount() const { return SrcItemCount; }
         uint32 GetSrcSpell() const { return SrcSpell; }
@@ -238,6 +270,9 @@ class Quest
         std::string GetRequestItemsText() const { return RequestItemsText; }
         std::string GetEndText() const { return EndText; }
         int32  GetRewOrReqMoney() const;
+#if defined(TBC)
+        uint32 GetRewHonorableKills() const { return RewHonorableKills; }
+#endif
         uint32 GetRewMoneyMaxLevel() const { return RewMoneyMaxLevel; }
         // use in XP calculation at client
         uint32 GetRewSpell() const { return RewSpell; }
@@ -255,6 +290,9 @@ class Quest
 
         bool   IsRepeatable() const { return m_SpecialFlags & QUEST_SPECIAL_FLAG_REPEATABLE; }
         bool   IsAutoComplete() const { return QuestMethod ? false : true; }
+#if defined(TBC)
+        bool   IsDaily() const { return m_QuestFlags & QUEST_FLAGS_DAILY; }
+#endif
         bool   IsAllowedInRaid() const;
 
         // quest can be fully deactivated and will not be available for any player
@@ -322,6 +360,9 @@ class Quest
         uint32 LimitTime;
         uint32 m_QuestFlags;
         uint32 m_SpecialFlags;
+#if defined(TBC)
+        uint32 CharTitleId;
+#endif
         int32  PrevQuestId;
         int32  NextQuestId;
         int32  ExclusiveGroup;
@@ -335,6 +376,9 @@ class Quest
         std::string OfferRewardText;
         std::string RequestItemsText;
         std::string EndText;
+#if defined(TBC)
+        uint32 RewHonorableKills;
+#endif
         int32  RewOrReqMoney;
         uint32 RewMoneyMaxLevel;
         uint32 RewSpell;

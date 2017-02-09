@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -175,6 +175,7 @@ namespace ACE_Based
              * @param msecs
              */
             static void Sleep(unsigned long msecs);
+#if defined(TBC)
             /**
              * @brief
              *
@@ -193,6 +194,7 @@ namespace ACE_Based
              * @return Thread
              */
             static Thread* current();
+#endif
 
         private:
             /**
@@ -225,8 +227,10 @@ namespace ACE_Based
              * @brief
              *
              */
+#if defined(TBC)
             typedef ACE_TSS<Thread> ThreadStorage;
             static ThreadStorage *m_ThreadStorage; /**< global object - container for Thread class representation of every thread */
+#endif
             static ThreadPriority m_TpEnum; /**< use this object to determine current OS thread priority values mapped to enum Priority{} */
     };
 }

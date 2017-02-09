@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@
 #define MANGOS_H_SCRIPTMGR
 
 #include "Common.h"
-#include "Policies/Singleton.h"
 #include "ObjectGuid.h"
 #include "DBCEnums.h"
 #include <ace/Atomic_Op.h>
@@ -107,6 +106,7 @@ enum DBScriptCommand                                        // resSource, resTar
     SCRIPT_COMMAND_RESPAWN_GO               = 9,            // source = any, datalong=db_guid, datalong2=despawn_delay
     SCRIPT_COMMAND_TEMP_SUMMON_CREATURE     = 10,           // source = any, datalong=creature entry, datalong2=despawn_delay
                                                             // data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL = summon active
+                                                            // dataint = (bool) setRun; 0 = off (default), 1 = on
     SCRIPT_COMMAND_OPEN_DOOR                = 11,           // datalong=db_guid (or not provided), datalong2=reset_delay
     SCRIPT_COMMAND_CLOSE_DOOR               = 12,           // datalong=db_guid (or not provided), datalong2=reset_delay
     SCRIPT_COMMAND_ACTIVATE_OBJECT          = 13,           // source = unit, target=GO
@@ -147,7 +147,7 @@ enum DBScriptCommand                                        // resSource, resTar
                                                             // dataint=diff to change a waittime of current Waypoint Movement
     SCRIPT_COMMAND_PAUSE_WAYPOINTS          = 32,           // resSource = Creature
                                                             // datalong = 0: unpause waypoint 1: pause waypoint
-    SCRIPT_COMMAND_JOIN_LFG                 = 33,           // datalong = zoneId;
+    SCRIPT_COMMAND_JOIN_LFG                 = 33,           // datalong = zoneId; // Currently only implemented in Zero
     SCRIPT_COMMAND_TERMINATE_COND           = 34,           // datalong = condition_id, datalong2 = if != 0 then quest_id of quest that will be failed for player's group if the script is terminated
                                                             // data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL terminate when condition is false ELSE terminate when condition is true
     SCRIPT_COMMAND_SEND_AI_EVENT_AROUND     = 35,           // resSource = Creature, resTarget = Unit
@@ -171,6 +171,7 @@ enum DBScriptCommand                                        // resSource, resTar
                                                             // dataint = main hand slot, dataint2 = offhand slot, dataint3 = ranged slot
     SCRIPT_COMMAND_RESET_GO                 = 43,           // resTarget = GameObject
     SCRIPT_COMMAND_UPDATE_TEMPLATE          = 44,           // resSource = Creature, datalong = new creature entry, datalong2 = 0(Alliance) | 1(Horde)
+
 };
 
 #define MAX_TEXT_ID 4                                       // used for SCRIPT_COMMAND_TALK, SCRIPT_COMMAND_EMOTE, SCRIPT_COMMAND_CAST_SPELL, SCRIPT_COMMAND_TERMINATE_SCRIPT
@@ -685,7 +686,7 @@ class ScriptMgr
         ScriptNameMap      m_scriptNames;
         DBScripts          m_dbScripts;
 #ifdef _DEBUG
-        // mutex allowing to reload the script binding table
+        // mutex allowing to reload the script binding table; TODO just do it AWAY from any map update, e.g. right after sessions update 
         ACE_RW_Thread_Mutex m_bindMutex;
 #endif /* _DEBUG */
         // atomic op counter for active scripts amount

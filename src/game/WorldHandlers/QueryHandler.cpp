@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,10 +34,7 @@
 #include "ObjectMgr.h"
 #include "ObjectGuid.h"
 #include "Player.h"
-#include "UpdateMask.h"
 #include "NPCHandler.h"
-#include "Pet.h"
-#include "MapManager.h"
 #include "SQLStorages.h"
 
 void WorldSession::SendNameQueryOpcode(Player* p)
@@ -53,7 +50,16 @@ void WorldSession::SendNameQueryOpcode(Player* p)
     data << uint32(p->getRace());
     data << uint32(p->getGender());
     data << uint32(p->getClass());
-
+#if defined(TBC)
+    if (DeclinedName const* names = p->GetDeclinedNames())
+    {
+        data << uint8(1);                                   // is declined
+        for (int i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+            data << names->name[i];
+    }
+    else
+        data << uint8(0);                                   // is not declined
+#endif
     SendPacket(&data);
 }
 
@@ -100,6 +106,17 @@ void WorldSession::SendNameQueryOpcodeFromDBCallBack(QueryResult* result, uint32
     data << uint32(pGender);                                // gender
     data << uint32(pClass);                                 // class
 
+#if defined(TBC)
+    // if the first declined name field (5) is empty, the rest must be too
+    if (sWorld.getConfig(CONFIG_BOOL_DECLINED_NAMES_USED) && fields[5].GetCppString() != "")
+    {
+        data << uint8(1);                                   // is declined
+        for (int i = 5; i < MAX_DECLINED_NAME_CASES + 5; ++i)
+            data << fields[i].GetCppString();
+    }
+    else
+        data << uint8(0);                                   // is not declined
+#endif
     session->SendPacket(&data);
     delete result;
 }
@@ -127,15 +144,17 @@ void WorldSession::HandleQueryTimeOpcode(WorldPacket& /*recv_data*/)
 void WorldSession::HandleCreatureQueryOpcode(WorldPacket& recv_data)
 {
     uint32 entry;
+#if defined(CLASSIC)
     ObjectGuid guid;
-
+#endif
     recv_data >> entry;
+#if defined(TBC)
+    ObjectGuid guid;
+#endif
     recv_data >> guid;
-
+#if defined(CLASSIC)
     Creature* unit = _player->GetMap()->GetAnyTypeCreature(guid);
-
-    // if (unit == NULL)
-    //    sLog.outDebug( "WORLD: HandleCreatureQueryOpcode - (%u) NO SUCH UNIT! (GUID: %u, ENTRY: %u)", uint32(GUID_LOPART(guid)), guid, entry );
+#endif
 
     CreatureInfo const* ci = ObjectMgr::GetCreatureTemplate(entry);
     if (ci)
@@ -153,12 +172,22 @@ void WorldSession::HandleCreatureQueryOpcode(WorldPacket& recv_data)
         data << name;
         data << uint8(0) << uint8(0) << uint8(0);           // name2, name3, name4, always empty
         data << subName;
+#if defined(TBC)
+        data << ci->IconName;                               // "Directions" for guard, string for Icons 2.3.0
+#endif
         data << uint32(ci->CreatureTypeFlags);              // flags
+#if defined(CLASSIC)
         if (unit)
-            { data << uint32(((unit->IsPet()) ? 0 : ci->CreatureType)); } // CreatureType.dbc   wdbFeild8
+            {
+                data << uint32(((unit->IsPet()) ? 0 : ci->CreatureType));  // CreatureType.dbc   wdbFeild8
+            }
         else
-            { data << uint32(ci->CreatureType); }
-
+            {
+                data << uint32(ci->CreatureType);
+            }
+#else
+        data << uint32(ci->CreatureType);                   // CreatureType.dbc
+#endif
         data << uint32(ci->Family);                         // CreatureFamily.dbc
         data << uint32(ci->Rank);                           // Creature Rank (elite, boss, etc)
         data << uint32(0);                                  // unknown        wdbFeild11
@@ -214,7 +243,6 @@ void WorldSession::HandleGameObjectQueryOpcode(WorldPacket& recv_data)
         data << Name;
         data << uint16(0) << uint8(0) << uint8(0);          // name2, name3, name4
         data.append(info->raw.data, 24);
-        // data << float(info->size);                       // go size , to check
         SendPacket(&data);
         DEBUG_LOG("WORLD: Sent SMSG_GAMEOBJECT_QUERY_RESPONSE");
     }
@@ -360,8 +388,9 @@ void WorldSession::HandlePageTextQueryOpcode(WorldPacket& recv_data)
 
     uint32 pageID;
     recv_data >> pageID;
+#if defined(CLASSIC)
     recv_data.read_skip<uint64>();                          // guid
-
+#endif
     while (pageID)
     {
         PageText const* pPage = sPageTextStore.LookupEntry<PageText>(pageID);
@@ -402,7 +431,14 @@ void WorldSession::HandlePageTextQueryOpcode(WorldPacket& recv_data)
 
 void WorldSession::SendQueryTimeResponse()
 {
+#if defined(CLASSIC)
     WorldPacket data(SMSG_QUERY_TIME_RESPONSE, 4);
+#else
+    WorldPacket data(SMSG_QUERY_TIME_RESPONSE, 4 + 4);
+#endif
     data << uint32(time(NULL));
+#if defined(TBC)
+    data << uint32(sWorld.GetNextDailyQuestsResetTime() - time(NULL));
+#endif
     SendPacket(&data);
 }

@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,6 @@
 #include "Common.h"
 #include "WorldPacket.h"
 #include "Log.h"
-#include "Corpse.h"
-#include "GameObject.h"
 #include "Player.h"
 #include "ObjectAccessor.h"
 #include "ObjectGuid.h"
@@ -35,8 +33,7 @@
 #include "Object.h"
 #include "Group.h"
 #include "World.h"
-#include "Util.h"
-#include "DBCStores.h"
+
 #ifdef ENABLE_ELUNA
 #include "LuaEngine.h"
 #endif /* ENABLE_ELUNA */
@@ -474,6 +471,24 @@ void WorldSession::DoLootRelease(ObjectGuid lguid)
 
             switch (pItem->loot.loot_type)
             {
+#if (!defined(CLASSIC))
+                    // temporary loot in stacking items, clear loot state, no auto loot move
+                case LOOT_PROSPECTING:
+                {
+                    uint32 count = pItem->GetCount();
+
+                    // >=5 checked in spell code, but will work for cheating cases also with removing from another stacks.
+                    if (count > 5)
+                        count = 5;
+
+                    // reset loot for allow repeat looting if stack > 5
+                    pItem->loot.clear();
+                    pItem->SetLootState(ITEM_LOOT_REMOVED);
+
+                    player->DestroyItemCount(pItem, count, true);
+                    break;
+                }
+#endif
                     // temporary loot, auto loot move
                 case LOOT_DISENCHANTING:
                 {

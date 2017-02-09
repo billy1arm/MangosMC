@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 
 #include "Common.h"
 #include "Database/DatabaseEnv.h"
-#include "WorldPacket.h"
 #include "WorldSession.h"
 #include "World.h"
 #include "ObjectMgr.h"
@@ -32,7 +31,6 @@
 #include "PlayerDump.h"
 #include "SpellMgr.h"
 #include "Player.h"
-#include "Opcodes.h"
 #include "GameObject.h"
 #include "Chat.h"
 #include "Log.h"
@@ -49,6 +47,10 @@
 #include "PointMovementGenerator.h"
 #include "PathFinder.h"
 #include "TargetedMovementGenerator.h"
+#if defined(TBC)
+#include "SkillDiscovery.h"
+#include "SkillExtraItems.h"
+#endif
 #include "SystemConfig.h"
 #include "Config/Config.h"
 #include "Mail.h"
@@ -235,6 +237,7 @@ bool ChatHandler::HandleReloadAllCommand(char* /*args*/)
     HandleReloadSkillFishingBaseLevelCommand((char*)"");
 
     HandleReloadAllAreaCommand((char*)"");
+    HandleReloadAutoBroadcastCommand((char*)"");
     HandleReloadAllEventAICommand((char*)"");
     HandleReloadAllLootCommand((char*)"");
     HandleReloadAllNpcCommand((char*)"");
@@ -244,6 +247,9 @@ bool ChatHandler::HandleReloadAllCommand(char* /*args*/)
     HandleReloadAllGossipsCommand((char*)"");
     HandleReloadAllLocalesCommand((char*)"");
 
+#if defined(TBC)
+    HandleReloadMailLevelRewardCommand((char*)"");
+#endif
     HandleReloadCommandCommand((char*)"");
     HandleReloadReservedNameCommand((char*)"");
     HandleReloadMangosStringCommand((char*)"");
@@ -322,6 +328,10 @@ bool ChatHandler::HandleReloadAllEventAICommand(char* /*args*/)
 
 bool ChatHandler::HandleReloadAllSpellCommand(char* /*args*/)
 {
+#if defined(TBC)
+    HandleReloadSkillDiscoveryTemplateCommand((char*)"a");
+    HandleReloadSkillExtraItemTemplateCommand((char*)"a");
+#endif
     HandleReloadSpellAffectCommand((char*)"a");
     HandleReloadSpellAreaCommand((char*)"a");
     HandleReloadSpellChainCommand((char*)"a");
@@ -334,7 +344,9 @@ bool ChatHandler::HandleReloadAllSpellCommand(char* /*args*/)
     HandleReloadSpellTargetPositionCommand((char*)"a");
     HandleReloadSpellThreatsCommand((char*)"a");
     HandleReloadSpellPetAurasCommand((char*)"a");
+#if defined(CLASSIC)
     HandleReloadSpellLinkedCommand((char*)"a");
+#endif
     return true;
 }
 
@@ -391,6 +403,14 @@ bool ChatHandler::HandleReloadAreaTriggerTeleportCommand(char* /*args*/)
     sLog.outString("Re-Loading AreaTrigger teleport definitions...");
     sObjectMgr.LoadAreaTriggerTeleports();
     SendGlobalSysMessage("DB table `areatrigger_teleport` reloaded.", SEC_MODERATOR);
+    return true;
+}
+
+bool ChatHandler::HandleReloadAutoBroadcastCommand(char* /*args*/)
+{
+    sLog.outString("Re-Loading broadcast strings...");
+    sWorld.LoadBroadcastStrings();
+    SendGlobalSysMessage("Broadcast strings reloaded.", SEC_MODERATOR);
     return true;
 }
 
@@ -531,6 +551,17 @@ bool ChatHandler::HandleReloadLootTemplatesPickpocketingCommand(char* /*args*/)
     return true;
 }
 
+#if defined(TBC)
+bool ChatHandler::HandleReloadLootTemplatesProspectingCommand(char* /*args*/)
+{
+    sLog.outString("Re-Loading Loot Tables... (`prospecting_loot_template`)");
+    LoadLootTemplates_Prospecting();
+    LootTemplates_Prospecting.CheckLootRefs();
+    SendGlobalSysMessage("DB table `prospecting_loot_template` reloaded.");
+    return true;
+}
+#endif
+
 bool ChatHandler::HandleReloadLootTemplatesMailCommand(char* /*args*/)
 {
     sLog.outString("Re-Loading Loot Tables... (`mail_loot_template`)");
@@ -637,6 +668,24 @@ bool ChatHandler::HandleReloadReputationSpilloverTemplateCommand(char* /*args*/)
     SendGlobalSysMessage("DB table `reputation_spillover_template` reloaded.", SEC_MODERATOR);
     return true;
 }
+
+#if defined(TBC)
+bool ChatHandler::HandleReloadSkillDiscoveryTemplateCommand(char* /*args*/)
+{
+    sLog.outString("Re-Loading Skill Discovery Table...");
+    LoadSkillDiscoveryTable();
+    SendGlobalSysMessage("DB table `skill_discovery_template` (recipes discovered at crafting) reloaded.", SEC_MODERATOR);
+    return true;
+}
+
+bool ChatHandler::HandleReloadSkillExtraItemTemplateCommand(char* /*args*/)
+{
+    sLog.outString("Re-Loading Skill Extra Item Table...");
+    LoadSkillExtraItemTable();
+    SendGlobalSysMessage("DB table `skill_extra_item_template` (extra item creation when crafting) reloaded.", SEC_MODERATOR);
+    return true;
+}
+#endif
 
 bool ChatHandler::HandleReloadScriptBindingCommand(char* /*args*/)
 {
@@ -752,6 +801,7 @@ bool ChatHandler::HandleReloadSpellPetAurasCommand(char* /*args*/)
     return true;
 }
 
+#if defined(CLASSIC)
 bool ChatHandler::HandleReloadSpellLinkedCommand(char* /*arg*/)
 {
     sLog.outString("Re-Loading spell linked table...");
@@ -759,6 +809,7 @@ bool ChatHandler::HandleReloadSpellLinkedCommand(char* /*arg*/)
     SendGlobalSysMessage("DB table `spell_linked` reloaded.", SEC_MODERATOR);
     return true;
 }
+#endif
 
 bool ChatHandler::HandleReloadPageTextsCommand(char* /*args*/)
 {
@@ -794,7 +845,6 @@ bool ChatHandler::HandleReloadBattleEventCommand(char* /*args*/)
 
 bool ChatHandler::HandleReloadEventAITextsCommand(char* /*args*/)
 {
-
     sLog.outString("Re-Loading Texts from `creature_ai_texts`...");
     sEventAIMgr.LoadCreatureEventAI_Texts(true);
     SendGlobalSysMessage("DB table `creature_ai_texts` reloaded.", SEC_MODERATOR);
@@ -1051,6 +1101,16 @@ bool ChatHandler::HandleReloadLocalesQuestCommand(char* /*args*/)
     SendGlobalSysMessage("DB table `locales_quest` reloaded.", SEC_MODERATOR);
     return true;
 }
+
+#if defined(TBC)
+bool ChatHandler::HandleReloadMailLevelRewardCommand(char* /*args*/)
+{
+    sLog.outString("Re-Loading Player level dependent mail rewards...");
+    sObjectMgr.LoadMailLevelRewards();
+    SendGlobalSysMessage("DB table `mail_level_reward` reloaded.");
+    return true;
+}
+#endif
 
 bool ChatHandler::HandleReloadDisablesCommand(char * /*args*/)
 {
@@ -2496,15 +2556,64 @@ bool ChatHandler::HandleListItemCommand(char* args)
         delete result;
     }
 
+#if defined(TBC)
+    // guild bank case
+    uint32 guild_count = 0;
+    result = CharacterDatabase.PQuery("SELECT COUNT(item_entry) FROM guild_bank_item WHERE item_entry='%u'", item_id);
+    if (result)
+    {
+        guild_count = (*result)[0].GetUInt32();
+        delete result;
+    }
+
+    result = CharacterDatabase.PQuery(
+                 //      0             1           2
+                 "SELECT gi.item_guid, gi.guildid, guild.name "
+                 "FROM guild_bank_item AS gi, guild WHERE gi.item_entry='%u' AND gi.guildid = guild.guildid LIMIT %u ",
+                 item_id, uint32(count));
+
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            uint32 item_guid = fields[0].GetUInt32();
+            uint32 guild_guid = fields[1].GetUInt32();
+            std::string guild_name = fields[2].GetCppString();
+
+            char const* item_pos = "[in guild bank]";
+
+            PSendSysMessage(LANG_ITEMLIST_GUILD, item_guid, guild_name.c_str(), guild_guid, item_pos);
+        }
+        while (result->NextRow());
+
+        uint32 res_count = uint32(result->GetRowCount());
+
+        delete result;
+
+        if (count > res_count)
+            count -= res_count;
+        else if (count)
+            count = 0;
+    }
+#endif
+
+#if defined(CLASSIC)
     if (inv_count + mail_count + auc_count == 0)
+#else
+    if (inv_count + mail_count + auc_count + guild_count == 0)
+#endif
     {
         SendSysMessage(LANG_COMMAND_NOITEMFOUND);
         SetSentErrorMessage(true);
         return false;
     }
 
+#if defined(CLASSIC)
     PSendSysMessage(LANG_COMMAND_LISTITEMMESSAGE, item_id, inv_count + mail_count + auc_count, inv_count, mail_count, auc_count);
-
+#else
+    PSendSysMessage(LANG_COMMAND_LISTITEMMESSAGE, item_id, inv_count + mail_count + auc_count + guild_count, inv_count, mail_count, auc_count, guild_count);
+#endif
     return true;
 }
 
@@ -3495,6 +3604,30 @@ bool ChatHandler::HandleDamageCommand(char* args)
     return true;
 }
 
+#if defined(TBC)
+bool ChatHandler::HandleModifyArenaCommand(char* args)
+{
+    if (!*args)
+        return false;
+
+    Player* target = getSelectedPlayer();
+    if (!target)
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    int32 amount = (int32)atoi(args);
+
+    target->ModifyArenaPoints(amount);
+
+    PSendSysMessage(LANG_COMMAND_MODIFY_ARENA, GetNameLink(target).c_str(), target->GetArenaPoints());
+
+    return true;
+}
+#endif
+
 bool ChatHandler::HandleReviveCommand(char* args)
 {
     Player* target;
@@ -3761,7 +3894,17 @@ bool ChatHandler::HandleNpcInfoCommand(char* /*args*/)
     std::string curRespawnDelayStr = secsToTimeString(curRespawnDelay, true);
     std::string defRespawnDelayStr = secsToTimeString(target->GetRespawnDelay(), true);
 
-    PSendSysMessage(LANG_NPCINFO_CHAR, target->GetGuidStr().c_str(), faction, npcflags, Entry, displayid, nativeid);
+#if defined(TBC)
+    // Send information dependend on difficulty mode
+    CreatureInfo const* baseInfo = ObjectMgr::GetCreatureTemplate(Entry);
+    if (baseInfo->HeroicEntry == target->GetCreatureInfo()->Entry)
+        PSendSysMessage(LANG_NPCINFO_CHAR_DIFFICULTY, target->GetGuidStr().c_str(), faction, npcflags,
+                        Entry, target->GetCreatureInfo()->Entry, 1,
+                        displayid, nativeid);
+    else
+#endif
+        PSendSysMessage(LANG_NPCINFO_CHAR, target->GetGuidStr().c_str(), faction, npcflags, Entry, displayid, nativeid);
+
     PSendSysMessage(LANG_NPCINFO_LEVEL, target->getLevel());
     PSendSysMessage(LANG_NPCINFO_HEALTH, target->GetCreateHealth(), target->GetMaxHealth(), target->GetHealth());
     PSendSysMessage(LANG_NPCINFO_FLAGS, target->GetUInt32Value(UNIT_FIELD_FLAGS), target->GetUInt32Value(UNIT_DYNAMIC_FLAGS), target->getFaction());
@@ -4478,10 +4621,11 @@ static bool HandleResetStatsOrLevelHelper(Player* player)
     if (player->GetShapeshiftForm() == FORM_NONE)
         { player->InitDisplayIds(); }
 
+#if defined(CLASSIC)
     // is it need, only in pre-2.x used and field byte removed later?
     if (powertype == POWER_RAGE || powertype == POWER_MANA)
         { player->SetByteValue(UNIT_FIELD_BYTES_1, 1, 0xEE); }
-
+#endif
     player->SetByteValue(UNIT_FIELD_BYTES_2, 1, UNIT_BYTE2_FLAG_UNK3 | UNIT_BYTE2_FLAG_UNK5);
 
     player->SetUInt32Value(UNIT_FIELD_FLAGS, UNIT_FLAG_PVP_ATTACKABLE);
@@ -4528,6 +4672,9 @@ bool ChatHandler::HandleResetStatsCommand(char* args)
         { return false; }
 
     target->InitStatsForLevel(true);
+#if defined(TBC)
+    target->InitTaxiNodesForLevel();
+#endif
     target->InitTalentForLevel();
 
     return true;
@@ -5489,11 +5636,13 @@ bool ChatHandler::HandleGMFlyCommand(char* args)
     if (!target)
         { target = m_session->GetPlayer(); }
 
+#if defined(CLASSIC)
     // [-ZERO] Need reimplement in another way
     {
         SendSysMessage(LANG_USE_BOL);
         return false;
     }
+#endif
     target->SetCanFly(value);
     PSendSysMessage(LANG_COMMAND_FLYMODE_STATUS, GetNameLink(target).c_str(), args);
     return true;
@@ -6544,6 +6693,13 @@ bool ChatHandler::HandleSendMessageCommand(char* args)
     return true;
 }
 
+#if defined(TBC)
+bool ChatHandler::HandleFlushArenaPointsCommand(char* /*args*/)
+{
+    sBattleGroundMgr.DistributeArenaPoints();
+    return true;
+}
+#endif
 bool ChatHandler::HandleModifyGenderCommand(char* args)
 {
     if (!*args)

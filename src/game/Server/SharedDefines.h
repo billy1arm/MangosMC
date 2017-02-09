@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@
 #define MANGOS_SHAREDDEFINES_H
 
 #include "Platform/Define.h"
-#include <cassert>
 
 #ifndef MANGOS
 #define MANGOS
@@ -1136,7 +1135,7 @@ enum GameObjectDynamicLowFlags
     GO_DYNFLAG_LO_ACTIVATE          = 0x01,                 // enables interaction with GO
     GO_DYNFLAG_LO_ANIMATE           = 0x02,                 // possibly more distinct animation of GO
     GO_DYNFLAG_LO_NO_INTERACT       = 0x04,                 // appears to disable interaction (not fully verified)
-    GO_DYNFLAG_LO_SPARKLE           = 0x08                  // not fully verified
+    GO_DYNFLAG_LO_SPARKLE           = 0x08                  // makes GO sparkle
 };
 
 enum TextEmotes
@@ -2035,7 +2034,7 @@ enum SkillCategory
     SKILL_CATEGORY_PROFESSION    = 11,                      // primary professions
     SKILL_CATEGORY_GENERIC       = 12
 };
-/*[-ZERO]
+#if defined(CLASSIC)
 enum TotemCategory
 {
     TC_SKINNING_SKIFE              = 1,
@@ -2058,7 +2057,7 @@ enum TotemCategory
     TC_ADAMANTITE_ROD              = 62,
     TC_ETERNIUM_ROD                = 63
 };
-*/
+#endif
 
 enum UnitDynFlags
 {

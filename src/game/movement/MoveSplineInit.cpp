@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,13 +26,29 @@
 #include "MoveSpline.h"
 #include "packet_builder.h"
 #include "Unit.h"
+        // Not for Zero
+#if (!defined(CLASSIC))
+#include "TransportSystem.h"
+#endif
 
 namespace Movement
 {
     UnitMoveType SelectSpeedType(uint32 moveFlags)
     {
+#if defined(CLASSIC)
         if (moveFlags & MOVEFLAG_SWIMMING)
         {
+#else
+        if (moveFlags & MOVEFLAG_FLYING)
+        {
+            if (moveFlags & MOVEFLAG_BACKWARD /*&& speed_obj.flight >= speed_obj.flight_back*/)
+                return MOVE_FLIGHT_BACK;
+            else
+                return MOVE_FLIGHT;
+        }
+        else if (moveFlags & MOVEFLAG_SWIMMING)
+        {
+#endif
             if (moveFlags & MOVEFLAG_BACKWARD /*&& speed_obj.swim >= speed_obj.swim_back*/)
                 { return MOVE_SWIM_BACK; }
             else
@@ -52,8 +68,17 @@ namespace Movement
     int32 MoveSplineInit::Launch()
     {
         MoveSpline& move_spline = *unit.movespline;
-
+#if defined(CLASSIC)
         Vector3 real_position(unit.GetPositionX(), unit.GetPositionY(), unit.GetPositionZ());
+#else   // Not for Zero
+        TransportInfo* transportInfo = unit.GetTransportInfo();
+
+        Location real_position(unit.GetPositionX(), unit.GetPositionY(), unit.GetPositionZ(), unit.GetOrientation());
+
+        // If boarded use current local position
+        if (transportInfo)
+            transportInfo->GetLocalPosition(real_position.x, real_position.y, real_position.z, real_position.orientation);
+#endif
         // there is a big chance that current position is unknown if current state is not finalized, need compute it
         // this also allows calculate spline position and update map position in much greater intervals
         if (!move_spline.Finalized())
@@ -86,6 +111,15 @@ namespace Movement
 
         WorldPacket data(SMSG_MONSTER_MOVE, 64);
         data << unit.GetPackGUID();
+
+        // Not for Zero
+#if (!defined(CLASSIC))
+        if (transportInfo)
+        {
+            data.SetOpcode(SMSG_MONSTER_MOVE_TRANSPORT);
+            data << transportInfo->GetTransportGuid().WriteAsPacked();
+        }
+#endif
         PacketBuilder::WriteMonsterMove(move_spline, data);
         unit.SendMessageToSet(&data, true);
 
@@ -100,18 +134,25 @@ namespace Movement
         if (move_spline.Finalized())
             return;
 
-        // ToDo: update transport info if required
-        // TransportInfo* transportInfo = unit.GetTransportInfo();
-
+        // Not for Zero
+#if (!defined(CLASSIC))
+        TransportInfo* transportInfo = unit.GetTransportInfo();
+#endif
         Location real_position(unit.GetPositionX(), unit.GetPositionY(), unit.GetPositionZ(), unit.GetOrientation());
 
         // If boarded use current local position
-        // if (transportInfo)
-        //    transportInfo->GetLocalPosition(real_position.x, real_position.y, real_position.z, real_position.orientation);
-
+        // Not for Zero
+#if (!defined(CLASSIC))
+        if (transportInfo)
+            transportInfo->GetLocalPosition(real_position.x, real_position.y, real_position.z, real_position.orientation);
+#endif
         // there is a big chance that current position is unknown if current state is not finalized, need compute it
         // this also allows calculate spline position and update map position in much greater intervals
+#if defined (CLASSIC)
         if (!move_spline.Finalized() /*&& !transportInfo*/)
+#else
+        if (!move_spline.Finalized() && !transportInfo)
+#endif
             real_position = move_spline.ComputePosition();
 
         if (args.path.empty())
@@ -130,14 +171,14 @@ namespace Movement
         WorldPacket data(SMSG_MONSTER_MOVE, 64);
         data << unit.GetPackGUID();
 
-#if defined(TBC)
+        // Not for Zero
+#if (!defined(CLASSIC))
         if (transportInfo)
         {
             data.SetOpcode(SMSG_MONSTER_MOVE_TRANSPORT);
             data << transportInfo->GetTransportGuid().WriteAsPacked();
         }
 #endif
-
         data << real_position.x << real_position.y << real_position.z;
         data << move_spline.GetId();
         data << uint8(MonsterMoveStop);

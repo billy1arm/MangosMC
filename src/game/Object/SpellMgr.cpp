@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,12 +28,10 @@
 #include "ProgressBar.h"
 #include "DBCStores.h"
 #include "SQLStorages.h"
-#include "World.h"
 #include "Chat.h"
 #include "Spell.h"
-#include "BattleGround/BattleGroundMgr.h"
-#include "MapManager.h"
 #include "Unit.h"
+#include "World.h"
 
 bool IsPrimaryProfessionSkill(uint32 skill)
 {
@@ -322,21 +320,20 @@ WeaponAttackType GetWeaponAttackType(SpellEntry const* spellInfo)
     switch (spellInfo->DmgClass)
     {
         case SPELL_DAMAGE_CLASS_MELEE:
+        {
             if (spellInfo->HasAttribute(SPELL_ATTR_EX3_REQ_OFFHAND))
-                { return OFF_ATTACK; }
-            else
-                { return BASE_ATTACK; }
-            break;
+              { return OFF_ATTACK; }
+            return BASE_ATTACK;
+        }
         case SPELL_DAMAGE_CLASS_RANGED:
             return RANGED_ATTACK;
-            break;
         default:
+        {
             // Wands
             if (spellInfo->HasAttribute(SPELL_ATTR_EX2_AUTOREPEAT_FLAG))
-                { return RANGED_ATTACK; }
-            else
-                { return BASE_ATTACK; }
-            break;
+              { return RANGED_ATTACK; }
+            return BASE_ATTACK;
+        }
     }
 }
 
@@ -2009,6 +2006,11 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                         (spellInfo_2->Id == 21992 && spellInfo_1->Id == 27648))
                         { return false; }
 
+                    // Mark of Frost
+                    if ((spellInfo_1->Id == 23182 && spellInfo_2->Id == 23183) ||
+                        (spellInfo_2->Id == 23182 && spellInfo_1->Id == 23183))
+                        { return false; }
+
                     // Lightning Speed (Mongoose) and Fury of the Crashing Waves (Tsunami Talisman)
                     if ((spellInfo_1->Id == 28093 && spellInfo_2->Id == 42084) ||
                         (spellInfo_2->Id == 28093 && spellInfo_1->Id == 42084))
@@ -2272,6 +2274,10 @@ bool SpellMgr::IsNoStackSpellDueToSpell(uint32 spellId_1, uint32 spellId_2) cons
                     // Code refactoring
                     if (spellInfo_2->Id == 132 && spellInfo_1->IsFitToFamilyMask(0x0000000000008000))
                         { return false; }
+
+                    // Ice Block and Mark of Frost
+                    if (spellInfo_2->Id == 23182 && spellInfo_1->Id == 11958)
+                        { return true; }
 
                     // Arcane Intellect and Insight
                     // Code refactoring
@@ -4378,7 +4384,6 @@ bool IsDiminishingReturnsGroupDurationLimited(DiminishingGroup group)
         default:
             return false;
     }
-    return false;
 }
 
 DiminishingReturnsType GetDiminishingReturnsGroupType(DiminishingGroup group)

@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -336,6 +336,17 @@ void WorldSession::HandleQuestLogRemoveQuest(WorldPacket& recv_data)
             {
                 if (pQuest->HasSpecialFlag(QUEST_SPECIAL_FLAG_TIMED))
                     { _player->RemoveTimedQuest(quest); }
+#if defined(TBC)
+                for (int i = 0; i < QUEST_SOURCE_ITEM_IDS_COUNT; ++i)
+                {
+                    if (pQuest->ReqSourceId[i])
+                    {
+                        ItemPrototype const* iProto = ObjectMgr::GetItemPrototype(pQuest->ReqSourceId[i]);
+                        if (iProto && iProto->Bonding == BIND_QUEST_ITEM)
+                            _player->DestroyItemCount(pQuest->ReqSourceId[i], pQuest->ReqSourceCount[i], true, false, true);
+                    }
+                }
+#endif
             }
 
             _player->SetQuestStatus(quest, QUEST_STATUS_NONE);
@@ -489,17 +500,23 @@ void WorldSession::HandleQuestPushResult(WorldPacket& recvPacket)
 
     if (Player* pPlayer = ObjectAccessor::FindPlayer(_player->GetDividerGuid()))
     {
+#if defined(CLASSIC)
         WorldPacket data(MSG_QUEST_PUSH_RESULT, (8 + 4 + 1));
         data << ObjectGuid(guid);
         data << uint32(msg);                             // valid values: 0-8
         data << uint8(0);
+#else
+        WorldPacket data(MSG_QUEST_PUSH_RESULT, (8 + 1));
+        data << ObjectGuid(guid);
+        data << uint8(msg);                             // valid values: 0-8
+#endif
         pPlayer->GetSession()->SendPacket(&data);
         _player->ClearDividerGuid();
     }
 }
 
 /**
- * What - if any - kind of explanation mark or question-mark should a quest-giver display for a player
+ * What - if any - kind of exclamation mark or question-mark should a quest-giver display for a player
  * @param pPlayer - for whom
  * @param questgiver - from whom
  * @param defstatus - initial set status (usually it will be called with DIALOG_STATUS_NONE) - must not be DIALOG_STATUS_UNDEFINED
@@ -551,7 +568,13 @@ uint32 WorldSession::getDialogStatus(Player* pPlayer, Object* questgiver, uint32
             if (pQuest->IsAutoComplete() && pQuest->IsRepeatable())
                 { dialogStatusNew = DIALOG_STATUS_REWARD_REP; }
             else
-                { dialogStatusNew = DIALOG_STATUS_REWARD2; }
+                {
+#if defined(CLASSIC)
+                    dialogStatusNew = DIALOG_STATUS_REWARD2;
+#else
+                    dialogStatusNew = DIALOG_STATUS_REWARD;
+#endif
+                }
         }
         else if (status == QUEST_STATUS_INCOMPLETE)
             { dialogStatusNew = DIALOG_STATUS_INCOMPLETE; }
@@ -585,7 +608,12 @@ uint32 WorldSession::getDialogStatus(Player* pPlayer, Object* questgiver, uint32
                     }
                     else if (lowLevelDiff < 0 || pPlayer->getLevel() <= pPlayer->GetQuestLevelForPlayer(pQuest) + uint32(lowLevelDiff))
                     {
-                        dialogStatusNew = DIALOG_STATUS_AVAILABLE;
+#if defined(TBC)
+                        if (pQuest->HasQuestFlag(QUEST_FLAGS_DAILY))
+                            dialogStatusNew = DIALOG_STATUS_AVAILABLE_REP;
+                        else
+#endif
+                            dialogStatusNew = DIALOG_STATUS_AVAILABLE;
                     }
                     else
                         { dialogStatusNew = DIALOG_STATUS_CHAT; }

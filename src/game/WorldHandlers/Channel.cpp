@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -604,9 +604,6 @@ void Channel::Say(Player* player, const char* text, uint32 lang)
     bool speakInWorldDef = false;
     if (plr)
     {
-#if defined(CLASSIC)
-        sec = plr->GetSession()->GetSecurity();
-#endif
         if (plr->isGameMaster())
         {
 #if defined(CLASSIC)
@@ -615,7 +612,6 @@ void Channel::Say(Player* player, const char* text, uint32 lang)
             speakInWorldDef = true;
         }
         
-        // Not applicable for TBC onwards
 #if defined(CLASSIC)
         HonorRankInfo honorInfo = plr->GetHonorRankInfo();
         //We can speak in local defense if we're above this rank (see .h file)

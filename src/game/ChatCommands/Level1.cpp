@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -330,7 +330,7 @@ bool ChatHandler::HandleGPSCommand(char* args)
     uint32 have_map = GridMap::ExistMap(obj->GetMapId(), gx, gy) ? 1 : 0;
     uint32 have_vmap = GridMap::ExistVMap(obj->GetMapId(), gx, gy) ? 1 : 0;
 
-    TerrainInfo const* terrain = obj->GetTerrain();
+    TerrainInfo const* terrain = obj->GetMap()->GetTerrain();
 
     if (have_vmap)
     {
@@ -987,7 +987,9 @@ bool ChatHandler::HandleModifyASpeedCommand(char* args)
     chr->UpdateSpeed(MOVE_WALK,   true, modSpeed);
     chr->UpdateSpeed(MOVE_RUN,    true, modSpeed);
     chr->UpdateSpeed(MOVE_SWIM,   true, modSpeed);
-    // chr->UpdateSpeed(MOVE_TURN,   true, modSpeed);
+#if defined(TBC)
+    chr->UpdateSpeed(MOVE_FLIGHT, true, modSpeed);
+#endif
     return true;
 }
 
@@ -1125,6 +1127,44 @@ bool ChatHandler::HandleModifyBWalkCommand(char* args)
 
     return true;
 }
+
+#if defined(TBC)
+// Edit Player Fly
+bool ChatHandler::HandleModifyFlyCommand(char* args)
+{
+    if (!*args)
+        return false;
+
+    float modSpeed = (float)atof(args);
+
+    if (modSpeed > 10.0f || modSpeed < 0.1f)
+    {
+        SendSysMessage(LANG_BAD_VALUE);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    Player* chr = getSelectedPlayer();
+    if (chr == NULL)
+    {
+        SendSysMessage(LANG_NO_CHAR_SELECTED);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    // check online security
+    if (HasLowerSecurity(chr))
+        return false;
+
+    PSendSysMessage(LANG_YOU_CHANGE_FLY_SPEED, modSpeed, GetNameLink(chr).c_str());
+    if (needReportToTarget(chr))
+        ChatHandler(chr).PSendSysMessage(LANG_YOURS_FLY_SPEED_CHANGED, GetNameLink().c_str(), modSpeed);
+
+    chr->UpdateSpeed(MOVE_FLIGHT, true, modSpeed);
+
+    return true;
+}
+#endif
 
 // Edit Player Scale
 bool ChatHandler::HandleModifyScaleCommand(char* args)
@@ -1485,6 +1525,34 @@ bool ChatHandler::HandleModifyMoneyCommand(char* args)
 
     return true;
 }
+
+#if defined(TBC)
+bool ChatHandler::HandleModifyHonorCommand(char* args)
+{
+    if (!*args)
+        return false;
+
+    Player* target = getSelectedPlayer();
+    if (!target)
+    {
+        SendSysMessage(LANG_PLAYER_NOT_FOUND);
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    // check online security
+    if (HasLowerSecurity(target))
+        return false;
+
+    int32 amount = (int32)atoi(args);
+
+    target->ModifyHonorPoints(amount);
+
+    PSendSysMessage(LANG_COMMAND_MODIFY_HONOR, GetNameLink(target).c_str(), target->GetHonorPoints());
+
+    return true;
+}
+#endif
 
 bool ChatHandler::HandleTeleCommand(char* args)
 {

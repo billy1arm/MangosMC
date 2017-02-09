@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,6 @@
 #include "World.h"
 #include "ObjectAccessor.h"
 #include "BattleGround/BattleGroundMgr.h"
-#include "MapManager.h"
 #include "SocialMgr.h"
 #ifdef ENABLE_ELUNA
 #include "LuaEngine.h"
@@ -288,7 +287,10 @@ bool WorldSession::Update(PacketFilter& updater)
 
                     // single from authed time opcodes send in to after logout time
                     // and before other STATUS_LOGGEDIN_OR_RECENTLY_LOGGOUT opcodes.
-                    m_playerRecentlyLogout = false;
+#if defined(TBC)
+                    if (packet->GetOpcode() != CMSG_SET_ACTIVE_VOICE_CHANNEL)
+#endif
+                        m_playerRecentlyLogout = false;
 
                     ExecuteOpcode(opHandle, packet);
                     break;
@@ -343,6 +345,7 @@ bool WorldSession::Update(PacketFilter& updater)
         m_Socket = NULL;
     }
 
+    // Warden
     if (m_Socket && !m_Socket->IsClosed() && _warden)
         _warden->Update();
 
@@ -355,6 +358,7 @@ bool WorldSession::Update(PacketFilter& updater)
         if (!m_Socket || (ShouldLogOut(currTime) && !m_playerLoading))
             { LogoutPlayer(true); }
 
+        // Warden
         if (m_Socket && GetPlayer() && _warden)
             _warden->Update();
 
@@ -697,10 +701,16 @@ void WorldSession::SendAuthWaitQue(uint32 position)
     }
     else
     {
+#if defined(CLASSIC)
         WorldPacket packet(SMSG_AUTH_RESPONSE, 6);
+#else
+        WorldPacket packet(SMSG_AUTH_RESPONSE, 1 + 4);
+#endif
         packet << uint8(AUTH_WAIT_QUEUE);
         packet << uint32(position);
+#if defined(CLASSIC)
         packet << uint8(0);                                 // unk
+#endif
         SendPacket(&packet);
     }
 }
@@ -782,7 +792,20 @@ void WorldSession::SendTransferAborted(uint32 mapid, uint8 reason, uint8 arg)
     WorldPacket data(SMSG_TRANSFER_ABORTED, 4 + 2);
     data << uint32(mapid);
     data << uint8(reason);                                  // transfer abort reason
+#if defined(CLASSIC)
     data << uint8(0);                                       // arg. not used
+#else
+    switch (reason)
+    {
+        case TRANSFER_ABORT_INSUF_EXPAN_LVL:
+        case TRANSFER_ABORT_DIFFICULTY:
+            data << uint8(arg);
+            break;
+        default:                                            // possible not neaded (absent in 0.13, but add at backport for safe)
+            data << uint8(0);
+            break;
+    }
+#endif
     SendPacket(&data);
 }
 

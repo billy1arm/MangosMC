@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,6 @@
 #include "Log.h"
 #include "ProgressBar.h"
 #include "SharedDefines.h"
-#include "ObjectGuid.h"
 
 #include "DBCfmt.h"
 
@@ -587,6 +586,7 @@ AreaTableEntry const* GetAreaEntryByAreaID(uint32 area_id)
 
 AreaTableEntry const* GetAreaEntryByAreaFlagAndMap(uint32 area_flag, uint32 map_id)
 {
+#if defined(CLASSIC)
     // 1.12.1 areatable have duplicates for areaflag
     AreaTableEntry const* aEntry = NULL;
     for (uint32 i = 0 ; i <= sAreaStore.GetNumRows() ; i++)
@@ -609,7 +609,10 @@ AreaTableEntry const* GetAreaEntryByAreaFlagAndMap(uint32 area_flag, uint32 map_
 
     if (aEntry)
         { return aEntry; } // return last entry found if exist (not same map_id but it seem ok in some places)
-
+#else
+    if (area_flag)
+        return sAreaStore.LookupEntry(area_flag);
+#endif
     if (MapEntry const* mapEntry = sMapStore.LookupEntry(map_id))
         { return GetAreaEntryByAreaID(mapEntry->linked_zone); }
 
@@ -625,6 +628,35 @@ uint32 GetAreaFlagByMapId(uint32 mapid)
         { return i->second; }
 }
 
+#if (!defined(CLASSIC))
+uint32 GetVirtualMapForMapAndZone(uint32 mapid, uint32 zoneId)
+{
+    if (mapid != 530)                                       // speed for most cases
+        return mapid;
+
+    if (WorldMapAreaEntry const* wma = sWorldMapAreaStore.LookupEntry(zoneId))
+        return wma->virtual_map_id >= 0 ? wma->virtual_map_id : wma->map_id;
+
+    return mapid;
+}
+
+ContentLevels GetContentLevelsForMapAndZone(uint32 mapid, uint32 zoneId)
+{
+    mapid = GetVirtualMapForMapAndZone(mapid, zoneId);
+    if (mapid < 2)
+        return CONTENT_1_60;
+
+    MapEntry const* mapEntry = sMapStore.LookupEntry(mapid);
+    if (!mapEntry)
+        return CONTENT_1_60;
+
+    switch (mapEntry->Expansion())
+    {
+        default: return CONTENT_1_60;
+        case 1:  return CONTENT_61_70;
+    }
+}
+#endif
 
 ChatChannelsEntry const* GetChannelEntryFor(uint32 channel_id)
 {
@@ -677,27 +709,27 @@ ChatChannelsEntry const* GetChannelEntryFor(const std::string& name)
     return NULL;
 }
 
-/*[-ZERO]
+#if (!defined(CLASSIC))
 bool IsTotemCategoryCompatiableWith(uint32 itemTotemCategoryId, uint32 requiredTotemCategoryId)
 {
-    if(requiredTotemCategoryId==0)
+    if (requiredTotemCategoryId == 0)
         return true;
-    if(itemTotemCategoryId==0)
+    if (itemTotemCategoryId == 0)
         return false;
 
     TotemCategoryEntry const* itemEntry = sTotemCategoryStore.LookupEntry(itemTotemCategoryId);
-    if(!itemEntry)
+    if (!itemEntry)
         return false;
     TotemCategoryEntry const* reqEntry = sTotemCategoryStore.LookupEntry(requiredTotemCategoryId);
-    if(!reqEntry)
+    if (!reqEntry)
         return false;
 
-    if(itemEntry->categoryType!=reqEntry->categoryType)
+    if (itemEntry->categoryType != reqEntry->categoryType)
         return false;
 
-    return (itemEntry->categoryMask & reqEntry->categoryMask)==reqEntry->categoryMask;
+    return (itemEntry->categoryMask & reqEntry->categoryMask) == reqEntry->categoryMask;
 }
-*/
+#endif
 bool Zone2MapCoordinates(float& x, float& y, uint32 zone)
 {
     WorldMapAreaEntry const* maEntry = sWorldMapAreaStore.LookupEntry(zone);

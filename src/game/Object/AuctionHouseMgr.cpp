@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -105,7 +105,7 @@ void AuctionHouseMgr::SendAuctionWonMail(AuctionEntry* auction)
     // data for gm.log
     if (sWorld.getConfig(CONFIG_BOOL_GM_LOG_TRADE))
     {
-        AccountTypes bidder_security = SEC_PLAYER;
+        AccountTypes bidder_security;
         std::string bidder_name;
         if (bidder)
         {
@@ -177,6 +177,36 @@ void AuctionHouseMgr::SendAuctionWonMail(AuctionEntry* auction)
     }
 }
 
+#if defined(TBC)
+void AuctionHouseMgr::SendAuctionSalePendingMail(AuctionEntry* auction)
+{
+    ObjectGuid owner_guid = ObjectGuid(HIGHGUID_PLAYER, auction->owner);
+    Player* owner = sObjectMgr.GetPlayer(owner_guid);
+
+    // owner exist (online or offline)
+    if (owner || (owner_guid && sObjectMgr.GetPlayerAccountIdByGUID(owner_guid)))
+    {
+        std::ostringstream msgAuctionSalePendingSubject;
+        msgAuctionSalePendingSubject << auction->itemTemplate << ":" << auction->itemRandomPropertyId << ":" << AUCTION_SALE_PENDING;
+
+        std::ostringstream msgAuctionSalePendingBody;
+        uint32 auctionCut = auction->GetAuctionCut();
+
+        time_t distrTime = time(NULL) + HOUR;
+
+        msgAuctionSalePendingBody.width(16);
+        msgAuctionSalePendingBody << std::right << std::hex << auction->bidder;
+        msgAuctionSalePendingBody << std::dec << ":" << auction->bid << ":" << auction->buyout;
+        msgAuctionSalePendingBody << ":" << auction->deposit << ":" << auctionCut << ":0:";
+        msgAuctionSalePendingBody << secsToTimeBitFields(distrTime);
+
+        DEBUG_LOG("AuctionSalePending body string : %s", msgAuctionSalePendingBody.str().c_str());
+
+        MailDraft(msgAuctionSalePendingSubject.str(), msgAuctionSalePendingBody.str())
+        .SendMailTo(MailReceiver(owner, owner_guid), auction, MAIL_CHECK_MASK_COPIED);
+    }
+}
+#endif
 // call this method to send mail to auction owner, when auction is successful, it does not clear ram
 void AuctionHouseMgr::SendAuctionSuccessfulMail(AuctionEntry* auction)
 {
@@ -499,6 +529,10 @@ AuctionHouseEntry const* AuctionHouseMgr::GetAuctionHouseEntry(Unit* unit)
                 case  474: houseid = 7; break;              // gadgetzan, neutral
                 case  534: houseid = 2; break;              // Alliance Generic
                 case  855: houseid = 7; break;              // everlook, neutral
+#if defined(TBC)
+                case 1604: houseid = 6; break;              // b-elfs,
+                case 1638: houseid = 2; break;              // exodar, alliance
+#endif
                 default:                                    // for unknown case
                 {
                     FactionTemplateEntry const* u_entry = sFactionTemplateStore.LookupEntry(factionTemplateId);
@@ -588,6 +622,162 @@ void AuctionHouseObject::BuildListOwnerItems(WorldPacket& data, Player* player, 
         }
     }
 }
+
+#if defined(TBC)
+int AuctionEntry::CompareAuctionEntry(uint32 column, const AuctionEntry* auc, Player* viewPlayer) const
+{
+    switch (column)
+    {
+        case 0:                                             // level = 0
+        {
+            ItemPrototype const* itemProto1 = ObjectMgr::GetItemPrototype(itemTemplate);
+            ItemPrototype const* itemProto2 = ObjectMgr::GetItemPrototype(auc->itemTemplate);
+            if (!itemProto2 || !itemProto1)
+                return 0;
+            if (itemProto1->RequiredLevel < itemProto2->RequiredLevel)
+                return -1;
+            else if (itemProto1->RequiredLevel > itemProto2->RequiredLevel)
+                return +1;
+            break;
+        }
+        case 1:                                             // quality = 1
+        {
+            ItemPrototype const* itemProto1 = ObjectMgr::GetItemPrototype(itemTemplate);
+            ItemPrototype const* itemProto2 = ObjectMgr::GetItemPrototype(auc->itemTemplate);
+            if (!itemProto2 || !itemProto1)
+                return 0;
+            if (itemProto1->Quality < itemProto2->Quality)
+                return -1;
+            else if (itemProto1->Quality > itemProto2->Quality)
+                return +1;
+            break;
+        }
+        case 2:                                             // buyoutthenbid = 2
+            if (buyout != auc->buyout)
+            {
+                if (buyout < auc->buyout)
+                    return -1;
+                else if (buyout > auc->buyout)
+                    return +1;
+            }
+            else
+            {
+                if (bid < auc->bid)
+                    return -1;
+                else if (bid > auc->bid)
+                    return +1;
+            }
+            break;
+        case 3:                                             // duration = 3
+            if (expireTime < auc->expireTime)
+                return -1;
+            else if (expireTime > auc->expireTime)
+                return +1;
+            break;
+        case 4:                                             // status = 4
+            if (bidder < auc->bidder)
+                return -1;
+            else if (bidder > auc->bidder)
+                return +1;
+            break;
+        case 5:                                             // name = 5
+        {
+            ItemPrototype const* itemProto1 = ObjectMgr::GetItemPrototype(itemTemplate);
+            ItemPrototype const* itemProto2 = ObjectMgr::GetItemPrototype(auc->itemTemplate);
+            if (!itemProto2 || !itemProto1)
+                return 0;
+
+            int32 loc_idx = viewPlayer->GetSession()->GetSessionDbLocaleIndex();
+
+            std::string name1 = itemProto1->Name1;
+            sObjectMgr.GetItemLocaleStrings(itemProto1->ItemId, loc_idx, &name1);
+
+            std::string name2 = itemProto2->Name1;
+            sObjectMgr.GetItemLocaleStrings(itemProto2->ItemId, loc_idx, &name2);
+
+            std::wstring wname1, wname2;
+            Utf8toWStr(name1, wname1);
+            Utf8toWStr(name2, wname2);
+            return wname1.compare(wname2);
+        }
+        case 6:                                             // minbidbuyout = 6
+        {
+            uint32 bid1 = bid ? bid : startbid;
+            uint32 bid2 = auc->bid ? auc->bid : auc->startbid;
+
+            if (bid1 != bid2)
+            {
+                if (bid1 < bid2)
+                    return -1;
+                else if (bid1 > bid2)
+                    return +1;
+            }
+            else
+            {
+                if (buyout < auc->buyout)
+                    return -1;
+                else if (buyout > auc->buyout)
+                    return +1;
+            }
+
+            break;
+        }
+        case 7:                                             // seller = 7
+            return ownerName.compare(auc->ownerName);
+        case 8:                                             // bid = 8
+        {
+            uint32 bid1 = bid ? bid : startbid;
+            uint32 bid2 = auc->bid ? auc->bid : auc->startbid;
+
+            if (bid1 < bid2)
+                return -1;
+            else if (bid1 > bid2)
+                return +1;
+            break;
+        }
+        case 9:                                             // quantity = 9
+        {
+            if (itemCount < auc->itemCount)
+                return -1;
+            else if (itemCount > auc->itemCount)
+                return +1;
+            break;
+        }
+        case 10:                                            // buyout = 10
+            if (buyout < auc->buyout)
+                return -1;
+            else if (buyout > auc->buyout)
+                return +1;
+            break;
+        case 11:                                            // unused = 11
+        default:
+            break;
+    }
+
+    return 0;
+}
+
+bool AuctionSorter::operator()(const AuctionEntry* auc1, const AuctionEntry* auc2) const
+{
+    if (m_sort[0] == MAX_AUCTION_SORT)                      // not sorted
+        return false;
+
+    for (uint32 i = 0; i < MAX_AUCTION_SORT; ++i)
+    {
+        if (m_sort[i] == MAX_AUCTION_SORT)                  // end of sort
+            return false;
+
+        int res = auc1->CompareAuctionEntry(m_sort[i] & ~AUCTION_SORT_REVERSED, auc2, m_viewPlayer);
+        // "equal" by used column
+        if (res == 0)
+            continue;
+        // less/greater and normal/reversed ordered
+        return (res < 0) == ((m_sort[i] & AUCTION_SORT_REVERSED) == 0);
+    }
+
+    return false;                                           // "equal" by all sorts
+}
+#endif
 
 void AuctionHouseObject::BuildListAuctionItems(WorldPacket& data, Player* player,
         std::wstring const& wsearchedname, uint32 listfrom, uint32 levelmin, uint32 levelmax, uint32 usable,

@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,9 +22,7 @@
  * and lore are copyrighted by Blizzard Entertainment, Inc.
  */
 
-#include "MapManager.h"
 #include "Log.h"
-#include "GridStates.h"
 #include "CellImpl.h"
 #include "Map.h"
 #include "DBCEnums.h"
@@ -37,7 +35,11 @@
 #include "Util.h"
 
 char const* MAP_MAGIC         = "MAPS";
+#if defined(CLASSIC)
 char const* MAP_VERSION_MAGIC = "z1.4";
+#elif defined (TBC)
+char const* MAP_VERSION_MAGIC = "s1.4";
+#endif
 char const* MAP_AREA_MAGIC    = "AREA";
 char const* MAP_HEIGHT_MAGIC  = "MHGT";
 char const* MAP_LIQUID_MAGIC  = "MLIQ";
@@ -232,7 +234,11 @@ bool GridMap::loadHeightData(FILE* in, uint32 offset, uint32 /*size*/)
     return true;
 }
 
+#if defined(CLASSIC)
 bool GridMap::loadHolesData(FILE* in, uint32 offset, uint32 /*size*/)
+#else
+bool GridMap::loadHolesData(FILE* in, uint32 offset, uint32 size)
+#endif
 {
     if (fseek(in, offset, SEEK_SET) != 0)
         return false;
@@ -583,19 +589,19 @@ GridMapLiquidStatus GridMap::getLiquidStatus(float x, float y, float z, uint8 Re
     int idx = (x_int >> 3) * 16 + (y_int >> 3);
     uint8 type = m_liquidFlags ? m_liquidFlags[idx] : 1 << m_liquidType;
     uint32 entry = 0;
-
-    // ToDo: check if this part requires update for 1.12.1
     if (m_liquidEntry)
     {
         if (LiquidTypeEntry const* liquidEntry = sLiquidTypeStore.LookupEntry(m_liquidEntry[idx]))
         {
             entry = liquidEntry->Id;
+#if defined(CLASSIC)
             type &= MAP_LIQUID_TYPE_DARK_WATER;
+#endif
             uint32 liqTypeIdx = liquidEntry->Type;
             if ((entry < 21) && (type & MAP_LIQUID_TYPE_WATER))
             {
                 // only basic liquid stored in maps actualy so in some case we need to override type depend on area
-                // actualy only Naxxramas raid be overrided here
+                // actually only Naxxramas, Hyjal Mount and Coilfang raid be overrided here
                 if (AreaTableEntry const* area = sAreaStore.LookupEntry(getArea(x, y)))
                 {
                     uint32 overrideLiquid = area->LiquidTypeOverride;
@@ -905,8 +911,17 @@ float TerrainInfo::GetHeightStatic(float x, float y, float z, bool useVmaps/*=tr
     return mapHeight;
 }
 
+#if defined(CLASSIC)
 inline bool IsOutdoorWMO(uint32 mogpFlags)
+#else
+inline bool IsOutdoorWMO(uint32 mogpFlags, uint32 mapId)
+#endif
 {
+#if (!defined(CLASSIC))
+    // in flyable areas mounting up is also allowed if 0x0008 flag is set
+    if (mapId == 530)
+        return mogpFlags & 0x8008;
+#endif
     return mogpFlags & 0x8000;
 }
 
@@ -919,7 +934,11 @@ bool TerrainInfo::IsOutdoors(float x, float y, float z) const
     if (!GetAreaInfo(x, y, z, mogpFlags, adtId, rootId, groupId))
         { return true; }
 
+#if defined(CLASSIC)
     return IsOutdoorWMO(mogpFlags);
+#else
+    return IsOutdoorWMO(mogpFlags, GetMapId());
+#endif
 }
 
 bool TerrainInfo::GetAreaInfo(float x, float y, float z, uint32& flags, int32& adtId, int32& rootId, int32& groupId) const
@@ -972,7 +991,11 @@ uint16 TerrainInfo::GetAreaFlag(float x, float y, float z, bool* isOutdoors) con
     if (isOutdoors)
     {
         if (haveAreaInfo)
+#if defined(CLASSIC)
             { *isOutdoors = IsOutdoorWMO(mogpFlags); }
+#else
+            { *isOutdoors = IsOutdoorWMO(mogpFlags, GetMapId()); }
+#endif
         else
             { *isOutdoors = true; }
     }
@@ -1075,6 +1098,7 @@ bool TerrainInfo::IsInWater(float x, float y, float pZ, GridMapLiquidData* data)
     return false;
 }
 
+#if defined(CLASSIC)
 // check if creature is in water and have enough space to swim
 bool TerrainInfo::IsSwimmable(float x, float y, float pZ, float radius /*= 1.5f*/, GridMapLiquidData* data /*= 0*/) const
 {
@@ -1091,6 +1115,7 @@ bool TerrainInfo::IsSwimmable(float x, float y, float pZ, float radius /*= 1.5f*
     }
     return false;
 }
+#endif
 
 bool TerrainInfo::IsUnderWater(float x, float y, float z) const
 {
@@ -1239,17 +1264,14 @@ TerrainInfo* TerrainManager::LoadTerrain(const uint32 mapId)
 {
     ACE_GUARD_RETURN(LOCK_TYPE, _guard, m_mutex, NULL)
 
-    TerrainInfo* ptr = NULL;
     TerrainDataMap::const_iterator iter = i_TerrainMap.find(mapId);
     if (iter == i_TerrainMap.end())
     {
-        ptr = new TerrainInfo(mapId);
-        i_TerrainMap[mapId] = ptr;
+        TerrainInfo* ti = new TerrainInfo(mapId);
+        i_TerrainMap[mapId] = ti;
+        return ti;
     }
-    else
-        { ptr = (*iter).second; }
-
-    return ptr;
+    return (*iter).second;
 }
 
 void TerrainManager::UnloadTerrain(const uint32 mapId)

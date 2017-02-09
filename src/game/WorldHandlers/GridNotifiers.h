@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,7 @@
 #ifndef MANGOS_GRIDNOTIFIERS_H
 #define MANGOS_GRIDNOTIFIERS_H
 
-#include "ObjectGridLoader.h"
 #include "UpdateData.h"
-#include <iostream>
 
 #include "Corpse.h"
 #include "Object.h"
@@ -378,6 +376,7 @@ namespace MaNGOS
         template<class NOT_INTERESTED> void Visit(GridRefManager<NOT_INTERESTED>&) {}
     };
 
+#if defined(CLASSIC)
     // unit worker
     template<class Do>
     struct UnitWorker
@@ -399,6 +398,7 @@ namespace MaNGOS
 
         template<class NOT_INTERESTED> void Visit(GridRefManager<NOT_INTERESTED>&) {}
     };
+#endif
 
     // Creature searchers
 
@@ -949,6 +949,7 @@ namespace MaNGOS
             bool i_targetForPlayer;
     };
 
+#if defined(CLASSIC)
     class AnySpecificUnitInGameObjectRangeCheck
     {
         public:
@@ -1002,6 +1003,7 @@ namespace MaNGOS
             float               i_range;
             bool                i_isFriendly;
     };
+#endif
 
     // do attack at call of help to friendly crearture
     class CallOfHelpCreatureInRangeDo

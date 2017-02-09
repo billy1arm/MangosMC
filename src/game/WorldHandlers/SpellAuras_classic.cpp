@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@
 #include "WorldSession.h"
 #include "Opcodes.h"
 #include "Log.h"
-#include "UpdateMask.h"
 #include "World.h"
 #include "ObjectMgr.h"
 #include "SpellMgr.h"
@@ -42,7 +41,6 @@
 #include "Policies/Singleton.h"
 #include "Totem.h"
 #include "Creature.h"
-#include "Formulas.h"
 #include "BattleGround/BattleGround.h"
 #include "OutdoorPvP/OutdoorPvP.h"
 #include "CreatureAI.h"
@@ -1123,9 +1121,12 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
 {
     // spells required only Real aura add/remove
     if (!Real)
-        { return; }
+      { return; }
 
     Unit* target = GetTarget();
+
+    if (!target || !target->IsAlive())
+      { return; }
 
     // AT APPLY
     if (apply)
@@ -1209,7 +1210,7 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
     // AT REMOVE
     else
     {
-        if (IsQuestTameSpell(GetId()) && target->IsAlive())
+        if (IsQuestTameSpell(GetId()) && (GetAuraDuration() == 0))
         {
             Unit* caster = GetCaster();
             if (!caster || !caster->IsAlive())
@@ -2216,9 +2217,11 @@ void Aura::HandleModPossessPet(bool apply, bool Real)
 void Aura::HandleModCharm(bool apply, bool Real)
 {
     if (!Real)
-        { return; }
+      { return; }
 
     Unit* target = GetTarget();
+    if (!target || !target->IsAlive())
+      { return; }
 
     // not charm yourself
     if (GetCasterGuid() == target->GetObjectGuid())
@@ -2275,10 +2278,10 @@ void Aura::HandleModCharm(bool apply, bool Real)
             }
         }
         else if (Player *plTarget = target->ToPlayer())
-            plTarget->SetClientControl(plTarget, 0);
+          { plTarget->SetClientControl(plTarget, 0); }
 
         if (caster->GetTypeId() == TYPEID_PLAYER)
-            { ((Player*)caster)->CharmSpellInitialize(); }
+          { ((Player*)caster)->CharmSpellInitialize(); }
     }
     else
     {
@@ -2330,7 +2333,7 @@ void Aura::HandleModCharm(bool apply, bool Real)
         if (target->GetTypeId() == TYPEID_UNIT)
         {
             ((Creature*)target)->AIM_Initialize();
-            target->AttackedBy(caster);
+            //target->AttackedBy(caster);
         }
     }
 }
@@ -4340,7 +4343,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune (not use charges)
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             uint32 absorb = 0;
@@ -4431,7 +4434,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             uint32 absorb = 0;
@@ -4588,7 +4591,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune (not use charges)
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             // ignore non positive values (can be result apply spellmods to aura damage
@@ -4701,7 +4704,7 @@ void Aura::PeriodicTick()
                 { return; }
 
             // Check for immune (not use charges)
-            if (target->IsImmunedToDamage(GetSpellSchoolMask(spellProto)))
+            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
                 { return; }
 
             int32 pdamage = m_modifier.m_amount > 0 ? m_modifier.m_amount : 0;
@@ -5348,6 +5351,22 @@ void SpellAuraHolder::HandleSpellSpecificBoosts(bool apply)
 
     switch (GetSpellProto()->SpellFamilyName)
     {
+        case SPELLFAMILY_GENERIC:
+        {
+            switch (GetId())
+            {
+                case 20594:                                 // Stoneform (dwarven racial)
+                {
+                    spellId1 = 20612;
+                    break;
+                }
+                default:
+                {
+                    return;
+                }
+            }
+            break;
+        }
         case SPELLFAMILY_MAGE:
         {
             switch (GetId())

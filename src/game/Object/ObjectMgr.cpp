@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,7 +32,6 @@
 #include "ObjectGuid.h"
 #include "ScriptMgr.h"
 #include "SpellMgr.h"
-#include "UpdateMask.h"
 #include "World.h"
 #include "Group.h"
 #include "Transports.h"
@@ -40,13 +39,10 @@
 #include "Language.h"
 #include "PoolManager.h"
 #include "GameEventMgr.h"
-#include "Spell.h"
 #include "Chat.h"
-#include "AccountMgr.h"
 #include "MapPersistentStateMgr.h"
 #include "SpellAuras.h"
 #include "Util.h"
-#include "WaypointManager.h"
 #include "GossipDef.h"
 #include "Mail.h"
 #include "Formulas.h"
@@ -56,6 +52,7 @@
 #include "CellImpl.h"
 #include "DisableMgr.h"
 
+#include "ItemEnchantmentMgr.h"
 #include <limits>
 
 INSTANTIATE_SINGLETON_1(ObjectMgr);
@@ -452,7 +449,7 @@ void ObjectMgr::LoadCreatureTemplates()
 {
     SQLCreatureLoader loader;
     loader.Load(sCreatureStorage);
-    
+
     // check data correctness
     for (uint32 i = 1; i < sCreatureStorage.GetMaxEntry(); ++i)
     {
@@ -483,22 +480,22 @@ void ObjectMgr::LoadCreatureTemplates()
         // used later for scale
         CreatureDisplayInfoEntry const* displayScaleEntry = NULL;
 
-        for (int i = 0; i < MAX_CREATURE_MODEL; ++i)
+        for (int j = 0; j < MAX_CREATURE_MODEL; ++j)
         {
-            if (cInfo->ModelId[i])
+            if (cInfo->ModelId[j])
             {
-                CreatureDisplayInfoEntry const* displayEntry = sCreatureDisplayInfoStore.LookupEntry(cInfo->ModelId[i]);
+                CreatureDisplayInfoEntry const* displayEntry = sCreatureDisplayInfoStore.LookupEntry(cInfo->ModelId[j]);
                 if (!displayEntry)
                 {
-                    sLog.outErrorDb("Creature (Entry: %u) has nonexistent modelid_%d (%u), can crash client", cInfo->Entry, i + 1, cInfo->ModelId[i]);
-                    const_cast<CreatureInfo*>(cInfo)->ModelId[i] = 0;
+                    sLog.outErrorDb("Creature (Entry: %u) has nonexistent modelid_%d (%u), can crash client", cInfo->Entry, j + 1, cInfo->ModelId[j]);
+                    const_cast<CreatureInfo*>(cInfo)->ModelId[j] = 0;
                 }
                 else if (!displayScaleEntry)
                     { displayScaleEntry = displayEntry; }
 
-                CreatureModelInfo const* minfo = sCreatureModelStorage.LookupEntry<CreatureModelInfo>(cInfo->ModelId[i]);
+                CreatureModelInfo const* minfo = sCreatureModelStorage.LookupEntry<CreatureModelInfo>(cInfo->ModelId[j]);
                 if (!minfo)
-                    { sLog.outErrorDb("Creature (Entry: %u) are using modelid_%d (%u), but creature_model_info are missing for this model.", cInfo->Entry, i + 1, cInfo->ModelId[i]); }
+                    { sLog.outErrorDb("Creature (Entry: %u) are using modelid_%d (%u), but creature_model_info are missing for this model.", cInfo->Entry, j + 1, cInfo->ModelId[j]); }
             }
         }
 
@@ -759,7 +756,7 @@ void ObjectMgr::LoadCreatureItemTemplates()
 
         if (!eqInfo)
             { continue; }
-                
+
         EquipmentInfoItem const* itemProto = GetEquipmentInfoItem(eqInfo->entry);
 
         switch (itemProto->InventoryType)
@@ -1199,12 +1196,10 @@ void ObjectMgr::LoadCreatures()
         }
 
         if (gameEvent == 0 && GuidPoolId == 0 && EntryPoolId == 0) // if not this is to be managed by GameEvent System or Pool system
-        {
-            AddCreatureToGrid(guid, &data);
+            { AddCreatureToGrid(guid, &data); }
 
-            if (cInfo->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE)
-                m_activeCreatures.insert(ActiveCreatureGuidsOnMap::value_type(data.mapid, guid));
-        }
+        if (cInfo->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE)
+            { m_activeCreatures.insert(ActiveCreatureGuidsOnMap::value_type(data.mapid, guid)); }
 
         ++count;
     }
@@ -1236,14 +1231,12 @@ void ObjectMgr::RemoveCreatureFromGrid(uint32 guid, CreatureData const* data)
 
 void ObjectMgr::LoadGameObjects()
 {
-    uint32 count = 0;
-
-    //                                                0                           1   2    3           4           5           6
-    QueryResult* result = WorldDatabase.Query("SELECT gameobject.guid, gameobject.id, map, position_x, position_y, position_z, orientation,"
-                          //   7          8          9          10         11             12            13     14
-                          "rotation0, rotation1, rotation2, rotation3, spawntimesecs, animprogress, state, event,"
-                          //   15                          16
-                          "pool_gameobject.pool_entry, pool_gameobject_template.pool_entry "
+    //                                                           0                1              2               3                      4                      5                      6
+    QueryResult* result = WorldDatabase.Query("SELECT gameobject.guid, gameobject.id, gameobject.map, gameobject.position_x, gameobject.position_y, gameobject.position_z, gameobject.orientation, "
+                          //          7                     8                     9                     10                    11                        12                       13
+                          "gameobject.rotation0, gameobject.rotation1, gameobject.rotation2, gameobject.rotation3, gameobject.spawntimesecs, gameobject.animprogress, gameobject.state, "
+                          //                      14                      15                                   16
+                          "game_event_gameobject.`event`, pool_gameobject.pool_entry, pool_gameobject_template.pool_entry "
                           "FROM gameobject "
                           "LEFT OUTER JOIN game_event_gameobject ON gameobject.guid = game_event_gameobject.guid "
                           "LEFT OUTER JOIN pool_gameobject ON gameobject.guid = pool_gameobject.guid "
@@ -1260,6 +1253,7 @@ void ObjectMgr::LoadGameObjects()
 
     BarGoLink bar(result->GetRowCount());
 
+    uint32 local_transports = 0;
     do
     {
         Field* fields = result->Fetch();
@@ -1355,21 +1349,22 @@ void ObjectMgr::LoadGameObjects()
             continue;
         }
 
-        if (gameEvent == 0 && GuidPoolId == 0 && EntryPoolId == 0) // if not this is to be managed by GameEvent System or Pool system
+        if (gInfo->type != GAMEOBJECT_TYPE_TRANSPORT && gameEvent == 0 && GuidPoolId == 0 && EntryPoolId == 0) // if not this is to be managed by GameEvent System or Pool system
             { AddGameobjectToGrid(guid, &data); }
 
-        //uint32 zoneId, areaId;
-        //sTerrainMgr.LoadTerrain(data.mapid)->GetZoneAndAreaId(zoneId, areaId, data.posX, data.posY, data.posZ);
-        //sLog.outErrorDb("UPDATE gameobject SET zone_id=%u, area_id=%u WHERE guid=%u;", zoneId, areaId, guid);
-
-        ++count;
+        if (gInfo->type == GAMEOBJECT_TYPE_TRANSPORT)
+        {
+            m_localTransports.insert(LocalTransportGuidsOnMap::value_type(data.mapid, guid));
+            ++local_transports;
+        }
     }
     while (result->NextRow());
 
     delete result;
 
-    sLog.outString(">> Loaded " SIZEFMTD " gameobjects", mGameObjectDataMap.size());
     sLog.outString();
+    sLog.outString(">> Loaded " SIZEFMTD " gameobjects", mGameObjectDataMap.size());
+    sLog.outString(">>> Loaded %u local transport objects", local_transports);
 }
 
 void ObjectMgr::AddGameobjectToGrid(uint32 guid, GameObjectData const* data)
@@ -6948,7 +6943,12 @@ bool PlayerCondition::Meets(Player const* player, Map const* map, WorldObject co
             return faction && player->GetReputationMgr().GetRank(faction) >= ReputationRank(m_value2);
         }
         case CONDITION_TEAM:
-            return uint32(player->GetTeam()) == m_value1;
+        {
+            if (conditionSourceType == CONDITION_FROM_REFERING_LOOT && sWorld.getConfig(CONFIG_BOOL_ALLOW_TWO_SIDE_INTERACTION_AUCTION))
+                { return true; }
+            else
+                { return uint32(player->GetTeam()) == m_value1; }
+        }
         case CONDITION_SKILL:
             return player->HasSkill(m_value1) && player->GetBaseSkillValue(m_value1) >= m_value2;
         case CONDITION_QUESTREWARDED:
@@ -8092,57 +8092,6 @@ void ObjectMgr::LoadVendorTemplates()
 
     for (std::set<uint32>::const_iterator vItr = vendor_ids.begin(); vItr != vendor_ids.end(); ++vItr)
         { sLog.outErrorDb("Table `npc_vendor_template` has vendor template %u not used by any vendors ", *vItr); }
-}
-
-/* This function is supposed to take care of three things:
- *  1) Load Transports on Map or on Continents
- *  2) Load Active Npcs on Map or Continents
- *  3) Load Everything dependend on config setting LoadAllGridsOnMaps
- *
- *  This function is currently WIP, hence parts exist only as draft.
- */
-void ObjectMgr::LoadActiveEntities(Map* _map)
-{
-    // Special case on startup - load continents
-    if (!_map)
-    {
-        uint32 continents[] = {0, 1};
-        for (uint8 i = 0; i < countof(continents); ++i)
-        {
-            _map = sMapMgr.FindMap(continents[i]);
-            if (!_map)
-                { _map = sMapMgr.CreateMap(continents[i], NULL); }
-
-            if (_map)
-                { LoadActiveEntities(_map); }
-            else
-                { sLog.outError("ObjectMgr::LoadActiveEntities - Unable to create Map %u", continents[i]); }
-        }
-
-        return;
-    }
-
-    // Load active objects for _map
-    std::set<uint32> const* mapList = sWorld.getConfigForceLoadMapIds();
-    if (mapList && mapList->find(_map->GetId()) != mapList->end())
-    {
-        for (CreatureDataMap::const_iterator itr = mCreatureDataMap.begin(); itr != mCreatureDataMap.end(); ++itr)
-        {
-            if (itr->second.mapid == _map->GetId())
-                { _map->ForceLoadGrid(itr->second.posX, itr->second.posY); }
-        }
-    }
-    else                                                    // Normal case - Load all npcs that are active
-    {
-        std::pair<ActiveCreatureGuidsOnMap::const_iterator, ActiveCreatureGuidsOnMap::const_iterator> bounds = m_activeCreatures.equal_range(_map->GetId());
-        for (ActiveCreatureGuidsOnMap::const_iterator itr = bounds.first; itr != bounds.second; ++itr)
-        {
-            CreatureData const& data = mCreatureDataMap[itr->second];
-            { _map->ForceLoadGrid(data.posX, data.posY); }
-        }
-    }
-
-    // Load Transports on Map _map
 }
 
 void ObjectMgr::LoadNpcGossips()

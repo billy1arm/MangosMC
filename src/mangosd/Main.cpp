@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,7 +45,17 @@
 char serviceName[] = "mangosd";
 char serviceLongName[] = "MaNGOS world service";
 char serviceDescription[] = "Massive Network Game Object Server";
+
+#if defined(CLASSIC)
 const char RAW_VMAP_MAGIC[] = "VMAPz06";                    /**< used in extracted vmap files with raw data */
+#elif defined(TBC)
+const char RAW_VMAP_MAGIC[] = "VMAPs06";                    /**< used in extracted vmap files with raw data */
+#elif defined(WOTLK)
+const char RAW_VMAP_MAGIC[] = "VMAPt06";                    /**< used in extracted vmap files with raw data */
+#elif defined(CATA)
+const char RAW_VMAP_MAGIC[] = "VMAPc06";                    /**< used in extracted vmap files with raw data */
+#endif
+
 /*
  * -1 - not in service mode
  *  0 - stopped
@@ -186,14 +196,48 @@ extern int main(int argc, char** argv)
 
     sLog.outString("%s [world-daemon]", REVISION_NR);
     sLog.outString("<Ctrl-C> to stop.\n"
+#if defined(CLASSIC)
                    "  __  __      _  _  ___  ___  ___                         \n"
                    " |  \\/  |__ _| \\| |/ __|/ _ \\/ __|        We Love      \n"
-                   " | |\\/| / _` | .` | (_ | (_) \\__ \\          Wow        \n"
+                   " | |\\/| / _` | .` | (_ | (_) \\__ \\      Vanilla Wow    \n"
                    " |_|  |_\\__,_|_|\\_|\\___|\\___/|___/                    \n"
-                   "                                                          \n"
-                   " For help and support please visit:                       \n"
-                   " Website/Wiki: https://getmangos.eu                       \n"
+                   "                                        ____              \n"
+                   " For help and support please visit:    /_  /___ _ _ ___   \n"
+                   "      Website: https://getmangos.eu     / // -_) '_/ _ \\ \n"
+                   " Forum / Wiki: https://getmangos.eu    /___\\___|_| \\___/\n"
                   );
+#elif defined(TBC)
+                   "  __  __      _  _  ___  ___  ___                        \n"
+                   " |  \\/  |__ _| \\| |/ __|/ _ \\/ __|     We Love the    \n"
+                   " | |\\/| / _` | .` | (_ | (_) \\__ \\   Burning Crusade  \n"
+                   " |_|  |_\\__,_|_|\\_|\\___|\\___/|___/                   \n"
+                   "                                         ___             \n"
+                   " For help and support please visit:     / _ \\ _ _  ___  \n"
+                   "      Website: https://getmangos.eu    | (_) | ' \\/ -_) \n"
+                   " Forum / Wiki: https://getmangos.eu     \\___/|_||_\\___|\n"
+                  );
+#elif defined(WOTLK)
+                   "  __  __      _  _  ___  ___  ___                      \n"
+                   " |  \\/  |__ _| \\| |/ __|/ _ \\/ __|   Wrath of the   \n"
+                   " | |\\/| / _` | .` | (_ | (_) \\__ \\     Lich King    \n"
+                   " |_|  |_\\__,_|_|\\_|\\___|\\___/|___/                 \n"
+                   "                                        _____          \n"
+                   " For help and support please visit:    |_   _|_ __ _____\n"
+                   "      Website: https://getmangos.eu      | | \\ V  V / _ \\\n"
+                   " Forum / Wiki: https://getmangos.eu      |_|  \\_/\\_/\\___/ \n"
+                  );
+#elif defined(CATA)
+                   "  __  __      _  _  ___  ___  ___                                 \n"
+                   " |  \\/  |__ _| \\| |/ __|/ _ \\/ __|                             \n"
+                   " | |\\/| / _` | .` | (_ | (_) \\__ \\                             \n"
+                   " |_|  |_\\__,_|_|\\_|\\___|\\___/|___/                            \n"
+                   "                                        _____ _                   \n"
+                   " For help and support please visit:    |_   _| |_  _ _ ___ ___    \n"
+                   "      Website: https://getmangos.eu      | | | ' \\| '_/ -_) -_)  \n"
+                   " Forum / Wiki: https://getmangos.eu      |_| |_||_|_| \\___\\___| \n"
+                  );
+#endif
+
     sLog.outString("Using configuration file %s.", cfg_file);
 
     DETAIL_LOG("%s (Library: %s)", OPENSSL_VERSION_TEXT, SSLeay_version(SSLEAY_VERSION));

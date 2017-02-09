@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@
 #include "CreatureLinkingMgr.h"
 #include "Pet.h"
 #include "DBCStores.h"
+#include "Log.h"
 
 #include <cassert>
 
@@ -543,7 +544,6 @@ void MotionMaster::MoveFall()
     init.MoveTo(m_owner->GetPositionX(), m_owner->GetPositionY(), tz);
     init.SetFall();
     init.Launch();
-#if defined(TBC)
+    // TODO: implement as EffectMovementGenerator
     Mutate(new EffectMovementGenerator(0));
-#endif
 }

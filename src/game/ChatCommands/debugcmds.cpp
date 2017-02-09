@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@
  */
 
 #include "Common.h"
-#include "Database/DatabaseEnv.h"
 #include "DBCStores.h"
 #include "WorldPacket.h"
 #include "Player.h"
@@ -56,9 +55,15 @@ bool ChatHandler::HandleDebugSendSpellFailCommand(char* args)
     if (!ExtractOptUInt32(&args, failarg2, 0))
         { return false; }
 
+#if defined(CLASSIC)
     WorldPacket data(SMSG_CAST_FAILED, 4 + 1 + 1);
+#else
+    WorldPacket data(SMSG_CAST_FAILED, 5);
+#endif
     data << uint32(133);
+#if defined(CLASSIC)
     data << uint8(2);
+#endif
     data << uint8(failnum);
     if (failarg1 || failarg2)
         { data << uint32(failarg1); }
@@ -140,7 +145,11 @@ bool ChatHandler::HandleDebugSendOpcodeCommand(char* /*args*/)
         return false;
     }
 
+#if defined(CLASSIC)
     WorldPacket data(opcode, 0);
+#else
+    WorldPacket data(Opcodes(opcode), 0);
+#endif
 
     std::string type;
     while (stream >> type)
@@ -632,6 +641,13 @@ bool ChatHandler::HandleDebugBattlegroundCommand(char* /*args*/)
     return true;
 }
 
+#if (!defined(CLASSIC))
+bool ChatHandler::HandleDebugArenaCommand(char* /*args*/)
+{
+    sBattleGroundMgr.ToggleArenaTesting();
+    return true;
+}
+#endif
 bool ChatHandler::HandleDebugSpellCheckCommand(char* /*args*/)
 {
     sLog.outString("Check expected in code spell properties base at table 'spell_check' content...");
@@ -1066,7 +1082,11 @@ bool ChatHandler::HandleDebugSpellModsCommand(char* args)
     if (!typeStr)
         { return false; }
 
+#if defined(CLASSIC)
     uint16 opcode;
+#else
+    Opcodes opcode;
+#endif
     if (strncmp(typeStr, "flat", strlen(typeStr)) == 0)
         { opcode = SMSG_SET_FLAT_SPELL_MODIFIER; }
     else if (strncmp(typeStr, "pct", strlen(typeStr)) == 0)

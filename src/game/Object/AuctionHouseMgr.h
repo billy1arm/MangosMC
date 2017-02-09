@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,8 +39,6 @@
 #define MANGOS_H_AUCTION_HOUSE_MGR
 
 #include "Common.h"
-#include "SharedDefines.h"
-#include "Policies/Singleton.h"
 #include "DBCStructure.h"
 
 /** \addtogroup auctionhouse
@@ -53,7 +51,13 @@ class Player;
 class Unit;
 class WorldPacket;
 
+#if defined(CLASSIC)
 #define MIN_AUCTION_TIME (2*HOUR)
+#else
+#define MIN_AUCTION_TIME (12*HOUR)
+#define MAX_AUCTION_SORT 12
+#define AUCTION_SORT_REVERSED 0x10
+#endif
 
 /**
  * Documentation for this taken directly from comments in source
@@ -87,6 +91,9 @@ struct AuctionEntry
     uint32 itemCount;
     int32 itemRandomPropertyId;
     uint32 owner;                                           // player low guid, can be 0 for server generated auction
+#if defined(TBC)
+    std::wstring ownerName;                                 // cache name for sorting
+#endif
     uint32 startbid;                                        // start minimal bid value
     uint32 bid;                                             // current bid, =0 meaning no bids
     uint32 buyout;
@@ -104,6 +111,10 @@ struct AuctionEntry
     void DeleteFromDB() const;
     void SaveToDB() const;
     void AuctionBidWinning(Player* bidder = NULL);
+#if defined(TBC)
+    // -1,0,+1 order result
+    int CompareAuctionEntry(uint32 column, const AuctionEntry* auc, Player* viewPlayer) const;
+#endif
     bool UpdateBid(uint32 newbid, Player* newbidder = NULL);// true if normal bid, false if buyout, bidder==NULL for generated bid
 };
 
@@ -147,15 +158,31 @@ class AuctionHouseObject
 
         void BuildListBidderItems(WorldPacket& data, Player* player, uint32& count, uint32& totalcount);
         void BuildListOwnerItems(WorldPacket& data, Player* player, uint32& count, uint32& totalcount);
+#if defined(CLASSIC)
         void BuildListAuctionItems(WorldPacket& data, Player* player,
                                    std::wstring const& searchedname, uint32 listfrom, uint32 levelmin, uint32 levelmax, uint32 usable,
                                    uint32 inventoryType, uint32 itemClass, uint32 itemSubClass, uint32 quality,
                                    uint32& count, uint32& totalcount);
+#endif
         AuctionEntry* AddAuction(AuctionHouseEntry const* auctionHouseEntry, Item* newItem, uint32 etime, uint32 bid, uint32 buyout = 0, uint32 deposit = 0, Player* pl = NULL);
         AuctionEntry* AddAuctionByGuid(AuctionHouseEntry const* auctionHouseEntry, Item* newItem, uint32 etime, uint32 bid, uint32 buyout, uint32 lowguid);
     private:
         AuctionEntryMap AuctionsMap;
 };
+
+#if defined(TBC)
+class AuctionSorter
+{
+    public:
+        AuctionSorter(AuctionSorter const& sorter) : m_sort(sorter.m_sort), m_viewPlayer(sorter.m_viewPlayer) {}
+        AuctionSorter(uint8* sort, Player* viewPlayer) : m_sort(sort), m_viewPlayer(viewPlayer) {}
+        bool operator()(const AuctionEntry* auc1, const AuctionEntry* auc2) const;
+
+    private:
+        uint8* m_sort;
+        Player* m_viewPlayer;
+};
+#endif
 
 /**
  * This describes the type of auction house that we are dealing with, they can be either:
@@ -194,6 +221,9 @@ class AuctionHouseMgr
 
         // auction messages
         void SendAuctionWonMail(AuctionEntry* auction);
+#if defined(TBC)
+        void SendAuctionSalePendingMail(AuctionEntry* auction);
+#endif
         void SendAuctionSuccessfulMail(AuctionEntry* auction);
         void SendAuctionExpiredMail(AuctionEntry* auction);
         static uint32 GetAuctionDeposit(AuctionHouseEntry const* entry, uint32 time, Item* pItem);

@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,7 +57,6 @@
 #include "Policies/Singleton.h"
 #include "BattleGround/BattleGroundMgr.h"
 #include "OutdoorPvP/OutdoorPvP.h"
-#include "TemporarySummon.h"
 #include "VMapFactory.h"
 #include "MoveMap.h"
 #include "GameEventMgr.h"
@@ -73,10 +72,11 @@
 #include "CharacterDatabaseCleaner.h"
 #include "CreatureLinkingMgr.h"
 #include "Weather.h"
-#if defined(TBC)
+#if defined(CLASSIC)
 #include "LFGMgr.h"
 #endif
 #include "DisableMgr.h"
+#include "Language.h"
 
 #ifdef ENABLE_ELUNA
 #include "LuaEngine.h"
@@ -129,9 +129,15 @@ World::World()
     m_startTime = m_gameTime;
     m_maxActiveSessionCount = 0;
     m_maxQueuedSessionCount = 0;
+#if defined(CLASSIC)
+    m_MaintenanceTimeChecker = 0;
+#endif
 #if defined(TBC)
     m_NextDailyQuestReset = 0;
 #endif
+    m_broadcastEnable = false;
+    m_broadcastList.clear();
+    m_broadcastWeight = 0;
 
     m_defaultDbcLocale = LOCALE_enUS;
     m_availableDbcLocaleMask = 0;
@@ -147,8 +153,6 @@ World::World()
 
     for (int i = 0; i < CONFIG_BOOL_VALUE_COUNT; ++i)
         { m_configBoolValues[i] = false; }
-
-    m_configForceLoadMapIds = NULL;
 }
 
 /// World destructor
@@ -172,10 +176,6 @@ World::~World()
 
     VMAP::VMapFactory::clear();
     MMAP::MMapFactory::clear();
-
-    delete m_configForceLoadMapIds;
-
-    // TODO free addSessQueue
 }
 
 /// Cleanups before world stop
@@ -492,7 +492,11 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_RATE_MINING_AUTOPOOLING,   "Rate.Mining.Autopooling", 90);
     setConfigPos(CONFIG_FLOAT_RATE_INSTANCE_RESET_TIME, "Rate.InstanceResetTime", 1.0f);
     setConfigPos(CONFIG_FLOAT_RATE_TALENT, "Rate.Talent", 1.0f);
+#if defined(CLASSIC)
     setConfigPos(CONFIG_FLOAT_RATE_CORPSE_DECAY_LOOTED, "Rate.Corpse.Decay.Looted", 0.5f);
+#else
+    setConfigPos(CONFIG_FLOAT_RATE_CORPSE_DECAY_LOOTED, "Rate.Corpse.Decay.Looted", 0.0f);
+#endif
 
     setConfigMinMax(CONFIG_FLOAT_RATE_TARGET_POS_RECALCULATION_RANGE, "TargetPosRecalculateRange", 1.5f, CONTACT_DISTANCE, ATTACK_DISTANCE);
 
@@ -518,15 +522,25 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_BOOL_CLEAN_CHARACTER_DB, "CleanCharacterDB", true);
     setConfig(CONFIG_BOOL_GRID_UNLOAD, "GridUnload", true);
 
+    setConfig(CONFIG_UINT32_AUTOBROADCAST_INTERVAL, "AutoBroadcast", 600);
+
+    if (getConfig(CONFIG_UINT32_AUTOBROADCAST_INTERVAL) > 0)
+      { m_broadcastEnable = true; }
+    else
+      { m_broadcastEnable = false; }
+
+    if (reload && m_broadcastEnable)
+      { m_broadcastTimer.SetInterval(getConfig(CONFIG_UINT32_AUTOBROADCAST_INTERVAL) * IN_MILLISECONDS); }
+
+
     std::string forceLoadGridOnMaps = sConfig.GetStringDefault("LoadAllGridsOnMaps", "");
     if (!forceLoadGridOnMaps.empty())
     {
-        m_configForceLoadMapIds = new std::set<uint32>;
         unsigned int pos = 0;
         unsigned int id;
         VMAP::VMapFactory::chompAndTrim(forceLoadGridOnMaps);
         while (VMAP::VMapFactory::getNextId(forceLoadGridOnMaps, pos, id))
-            m_configForceLoadMapIds->insert(id);
+            m_configForceLoadMapIds.insert(id);
     }
 
     setConfig(CONFIG_UINT32_INTERVAL_SAVE, "PlayerSave.Interval", 15 * MINUTE * IN_MILLISECONDS);
@@ -612,7 +626,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_BOOL_ALL_TAXI_PATHS, "AllFlightPaths", false);
     setConfig(CONFIG_BOOL_INSTANT_TAXI, "InstantFlightPaths", false);
 #if defined(CLASSIC)
-    setConfig(CONFIG_UINT32_MOUNT_COST, "MountCost", 100000);    
+    setConfig(CONFIG_UINT32_MOUNT_COST, "MountCost", 100000);
     setConfigMin(CONFIG_UINT32_MIN_TRAIN_MOUNT_LEVEL, "MinTrainMountLevel", 40, 1);
     setConfig(CONFIG_UINT32_TRAIN_MOUNT_COST, "TrainMountCost", 900000);
     setConfig(CONFIG_UINT32_EPIC_MOUNT_COST, "EpicMountCost", 1000000);
@@ -813,13 +827,21 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_TIMERBAR_FATIGUE_GMLEVEL, "TimerBar.Fatigue.GMLevel", SEC_CONSOLE);
     setConfig(CONFIG_UINT32_TIMERBAR_FATIGUE_MAX,     "TimerBar.Fatigue.Max", 60);
     setConfig(CONFIG_UINT32_TIMERBAR_BREATH_GMLEVEL,  "TimerBar.Breath.GMLevel", SEC_CONSOLE);
+#if defined(CLASSIC)
     setConfig(CONFIG_UINT32_TIMERBAR_BREATH_MAX,      "TimerBar.Breath.Max", 60);
+#else
+    setConfig(CONFIG_UINT32_TIMERBAR_BREATH_MAX,      "TimerBar.Breath.Max", 180);
+#endif
     setConfig(CONFIG_UINT32_TIMERBAR_FIRE_GMLEVEL,    "TimerBar.Fire.GMLevel", SEC_CONSOLE);
     setConfig(CONFIG_UINT32_TIMERBAR_FIRE_MAX,        "TimerBar.Fire.Max", 1);
 
     setConfig(CONFIG_UINT32_LOG_WHISPERS,             "LogWhispers", 1);
 
+#if defined(CLASSIC)
     setConfig(CONFIG_BOOL_PET_UNSUMMON_AT_MOUNT,      "PetUnsummonAtMount", false);
+#else
+    setConfig(CONFIG_BOOL_PET_UNSUMMON_AT_MOUNT,      "PetUnsummonAtMount", true);
+#endif
 
 #ifdef ENABLE_PLAYERBOTS
     setConfig(CONFIG_BOOL_PLAYERBOT_DISABLE, "PlayerbotAI.DisableBots", true);
@@ -1474,13 +1496,24 @@ void World::SetInitialWorldSettings()
                            realmID, uint64(m_startTime), isoDate);
 
     m_timers[WUPDATE_AUCTIONS].SetInterval(MINUTE * IN_MILLISECONDS);
-    m_timers[WUPDATE_UPTIME].SetInterval(getConfig(CONFIG_UINT32_UPTIME_UPDATE)*MINUTE * IN_MILLISECONDS);
+    m_timers[WUPDATE_UPTIME].SetInterval(getConfig(CONFIG_UINT32_UPTIME_UPDATE) * MINUTE * IN_MILLISECONDS);
     // Update "uptime" table based on configuration entry in minutes.
     m_timers[WUPDATE_CORPSES].SetInterval(20 * MINUTE * IN_MILLISECONDS);
     m_timers[WUPDATE_DELETECHARS].SetInterval(DAY * IN_MILLISECONDS); // check for chars to delete every day
 
     // for AhBot
     m_timers[WUPDATE_AHBOT].SetInterval(20 * IN_MILLISECONDS); // every 20 sec
+
+    // for AutoBroadcast
+    sLog.outString("Starting AutoBroadcast System");
+    if (m_broadcastEnable)
+      { LoadBroadcastStrings(); }
+    else
+      { sLog.outString("AutoBroadcast is disabled");}
+    sLog.outString();
+
+    if (m_broadcastEnable)
+      { m_broadcastTimer.SetInterval(getConfig(CONFIG_UINT32_AUTOBROADCAST_INTERVAL) * IN_MILLISECONDS); }
 
     // to set mailtimer to return mails every day between 4 and 5 am
     // mailtimer is increased when updating auctions
@@ -1510,9 +1543,6 @@ void World::SetInitialWorldSettings()
     sLog.outString("Starting Outdoor PvP System");
     sOutdoorPvPMgr.InitOutdoorPvP();
 
-    // Not sure if this can be moved up in the sequence (with static data loading) as it uses MapManager
-    sLog.outString("Loading Transports...");
-    sMapMgr.LoadTransports();
 
     // Initialize Warden
     sLog.outString("Loading Warden Checks...");
@@ -1545,8 +1575,16 @@ void World::SetInitialWorldSettings()
     m_timers[WUPDATE_EVENTS].SetInterval(nextGameEvent);    // depend on next event
     sLog.outString();
 
-    sLog.outString("Loading grids for active creatures or transports...");
+    sLog.outString("Loading grids for active creatures and local transports...");
+#if defined(CLASSIC)
+    sMapMgr.LoadContinents();
+#else
     sObjectMgr.LoadActiveEntities(NULL);
+#endif
+    sLog.outString();
+
+    sLog.outString("Loading global transports...");
+    sMapMgr.LoadTransports();
     sLog.outString();
 
     // Delete all characters which have been deleted X days before
@@ -1633,6 +1671,20 @@ void World::Update(uint32 diff)
             { m_timers[i].Update(diff); }
         else
             { m_timers[i].SetCurrent(0); }
+    }
+
+    if (m_broadcastEnable)
+    {
+        if (m_broadcastTimer.GetCurrent() >= 0)
+          { m_broadcastTimer.Update(diff); }
+        else
+          { m_broadcastTimer.SetCurrent(0); }
+
+        if (m_broadcastTimer.Passed())
+        {
+            m_broadcastTimer.Reset();
+            AutoBroadcast();
+        }
     }
 
     ///- Update the game time and check for shutdown time
@@ -1752,11 +1804,11 @@ void World::Update(uint32 diff)
 
     // And last, but not least handle the issued cli commands
     ProcessCliCommands();
-
+// TODO: Accidently Removed ?
     ///- Used by Eluna
-#ifdef ENABLE_ELUNA
-    sEluna->OnWorldUpdate(diff);
-#endif /* ENABLE_ELUNA */
+// #ifdef ENABLE_ELUNA
+//     sEluna->OnWorldUpdate(diff);
+// #endif /* ENABLE_ELUNA */
 
     // cleanup unused GridMap objects as well as VMaps
     sTerrainMgr.Update(diff);
@@ -1833,7 +1885,7 @@ void World::SendWorldText(int32 string_id, ...)
     va_end(ap);
 }
 
-/// Sends a packet to all players with optional team and instance restrictions
+/// Sends a packet to all players with optional account access level restrictions
 void World::SendGlobalMessage(WorldPacket* packet, AccountTypes minSec)
 {
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
@@ -2051,10 +2103,10 @@ void World::ShutdownServ(uint32 time, uint32 options, uint8 exitcode)
     if (time == 0)
     {
         if (!(options & SHUTDOWN_MASK_IDLE) || GetActiveAndQueuedSessionCount() == 0)
-        { 
+        {
                 sObjectAccessor.SaveAllPlayers();        // save all players.
                 m_stopEvent = true;                                // exist code already set
-        }                             
+        }
         else
             { m_ShutdownTimer = 1; }                            // So that the session count is re-evaluated at next world tick
     }
@@ -2492,4 +2544,75 @@ void World::InvalidatePlayerDataToAllClient(ObjectGuid guid)
     WorldPacket data(SMSG_INVALIDATE_PLAYER, 8);
     data << guid;
     SendGlobalMessage(&data);
+}
+
+void World::LoadBroadcastStrings()
+{
+    if (!m_broadcastEnable)
+    return;
+
+    std::string queryStr = "SELECT `autobroadcast`.`id`, `autobroadcast`.`content`,`autobroadcast`.`ratio` FROM `autobroadcast`";
+
+    QueryResult* result = WorldDatabase.Query(queryStr.c_str());
+
+    if (!result)
+    {
+        m_broadcastEnable = false;
+        sLog.outErrorDb("DB table `autobroadcast` is empty.");
+        sLog.outString();
+        return;
+    }
+
+    m_broadcastList.clear();
+
+    BarGoLink bar(result->GetRowCount());
+    m_broadcastWeight = 0;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        bar.step();
+
+        uint32 ratio = fields[2].GetUInt32();
+        if (ratio == 0)
+          continue;
+
+        m_broadcastWeight += ratio;
+
+        BroadcastString bs;
+        bs.text = fields[1].GetString();
+        bs.freq = m_broadcastWeight;
+        m_broadcastList.push_back(bs);
+    }
+    while (result->NextRow());
+
+    delete result;
+    if (m_broadcastWeight == 0)
+    {
+        sLog.outString(">> Loaded 0 broadcast strings.");
+        m_broadcastEnable = false;
+    }
+    else
+    {
+        sLog.outString(">> Loaded " SIZEFMTD " broadcast strings.", m_broadcastList.size());
+    }
+}
+
+void World::AutoBroadcast()
+{
+    if (m_broadcastList.size() == 1)
+    {
+        SendWorldText(LANG_AUTOBROADCAST, m_broadcastList[0].text.c_str());
+    }
+    else
+    {
+        uint32 rn = urand(1, m_broadcastWeight);
+        std::vector<BroadcastString>::const_iterator it;
+        for (it = m_broadcastList.begin(); it != m_broadcastList.end(); ++it)
+        {
+            if (rn <= it->freq)
+            break;
+        }
+        SendWorldText(LANG_AUTOBROADCAST, it->text.c_str());
+    }
 }

@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -131,7 +131,9 @@ Thread::~Thread()
 }
 
 // initialize Thread's class static member
+#if defined(TBC)
 Thread::ThreadStorage *Thread::m_ThreadStorage = NULL;
+#endif
 ThreadPriority Thread::m_TpEnum;
 
 bool Thread::start()
@@ -141,8 +143,9 @@ bool Thread::start()
 
     // incRef before spawing the thread, otherwise Thread::ThreadTask() might call decRef and delete m_task
     m_task->incReference();
-
+#if defined(TBC)
     m_ThreadStorage = new ACE_TSS<Thread>();
+#endif
 
     bool res = (ACE_Thread::spawn(&Thread::ThreadTask, (void*)m_task, THREADFLAG, &m_iThreadId, &m_hThreadHandle) == 0);
 
@@ -162,8 +165,10 @@ bool Thread::wait()
 
     m_iThreadId = 0;
     m_hThreadHandle = 0;
+#if defined(TBC)
     delete m_ThreadStorage;
     m_ThreadStorage = NULL;
+#endif
 
     return (_res == 0);
 }
@@ -178,8 +183,10 @@ void Thread::destroy()
 
     m_iThreadId = 0;
     m_hThreadHandle = 0;
+#if defined(TBC)
     delete m_ThreadStorage;
     m_ThreadStorage = NULL;
+#endif
 
     // reference set at ACE_Thread::spawn
     m_task->decReference();
@@ -199,7 +206,7 @@ ACE_THR_FUNC_RETURN Thread::ThreadTask(void* param)
 {
     Runnable* _task = static_cast<Runnable*>(param);
     _task->incReference();
-    
+
     _task->run();
 
     // task execution complete, free referecne added at
@@ -208,6 +215,7 @@ ACE_THR_FUNC_RETURN Thread::ThreadTask(void* param)
     return (ACE_THR_FUNC_RETURN)0;
 }
 
+#if defined(TBC)
 ACE_thread_t Thread::currentId()
 {
     return ACE_Thread::self();
@@ -236,6 +244,7 @@ Thread* Thread::current()
 
     return _thread;
 }
+#endif
 
 void Thread::setPriority(Priority type)
 {

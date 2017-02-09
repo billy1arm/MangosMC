@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,6 @@
 #include "Policies/Singleton.h"
 #include "SharedDefines.h"
 
-#include <map>
 #include <set>
 #include <list>
 
@@ -214,9 +213,7 @@ enum eConfigUInt32Values
     CONFIG_UINT32_CHARDELETE_KEEP_DAYS,
     CONFIG_UINT32_CHARDELETE_METHOD,
     CONFIG_UINT32_CHARDELETE_MIN_LEVEL,
-#if defined(CLASSIC)
     CONFIG_UINT32_NUMTHREADS,
-#endif
     CONFIG_UINT32_GUID_RESERVE_SIZE_CREATURE,
     CONFIG_UINT32_GUID_RESERVE_SIZE_GAMEOBJECT,
     CONFIG_UINT32_CREATURE_RESPAWN_AGGRO_DELAY,
@@ -234,6 +231,7 @@ enum eConfigUInt32Values
     CONFIG_UINT32_PLAYERBOT_RESTRICTLEVEL,
     CONFIG_UINT32_PLAYERBOT_MINBOTLEVEL,
 #endif
+    CONFIG_UINT32_AUTOBROADCAST_INTERVAL,
     CONFIG_UINT32_VALUE_COUNT
 };
 
@@ -667,7 +665,7 @@ class World
         bool getConfig(eConfigBoolValues index) const { return m_configBoolValues[index]; }
 
         /// Get configuration about force-loaded maps
-        std::set<uint32>* getConfigForceLoadMapIds() const { return m_configForceLoadMapIds; }
+        bool isForceLoadMap(uint32 id) const { return m_configForceLoadMapIds.find(id) != m_configForceLoadMapIds.end(); }
 
         /// Are we on a "Player versus Player" server?
         bool IsPvPRealm() { return (getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_PVP || getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_RPPVP || getConfig(CONFIG_UINT32_GAME_TYPE) == REALM_TYPE_FFA_PVP); }
@@ -713,8 +711,8 @@ class World
         // used World DB version
         void LoadDBVersion();
         char const* GetDBVersion() { return m_DBVersion.c_str(); }
-        char const* GetCreatureEventAIVersion() { return m_CreatureEventAIVersion.c_str(); }
 
+        void LoadBroadcastStrings();
 
         /**
         * \brief: force all client to request player data
@@ -753,6 +751,18 @@ class World
         bool configNoReload(bool reload, eConfigInt32Values index, char const* fieldname, int32 defvalue);
         bool configNoReload(bool reload, eConfigFloatValues index, char const* fieldname, float defvalue);
         bool configNoReload(bool reload, eConfigBoolValues index, char const* fieldname, bool defvalue);
+
+        // AutoBroadcast system
+        void AutoBroadcast();
+        struct BroadcastString
+        {
+            uint32 freq;
+            std::string text;
+        };
+        std::vector<BroadcastString> m_broadcastList;
+        uint32 m_broadcastWeight;
+        bool m_broadcastEnable;
+        IntervalTimer m_broadcastTimer;
 
         static volatile bool m_stopEvent;
         static uint8 m_ExitCode;
@@ -821,10 +831,9 @@ class World
 
         // used versions
         std::string m_DBVersion;
-        std::string m_CreatureEventAIVersion;
 
         // List of Maps that should be force-loaded on startup
-        std::set<uint32>* m_configForceLoadMapIds;
+        std::set<uint32> m_configForceLoadMapIds;
 };
 
 extern uint32 realmID;

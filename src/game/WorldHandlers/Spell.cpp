@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,6 @@
 #include "GridNotifiersImpl.h"
 #include "Opcodes.h"
 #include "Log.h"
-#include "UpdateMask.h"
 #include "World.h"
 #include "ObjectMgr.h"
 #include "SpellMgr.h"
@@ -40,7 +39,6 @@
 #include "DynamicObject.h"
 #include "Group.h"
 #include "UpdateData.h"
-#include "MapManager.h"
 #include "ObjectAccessor.h"
 #include "CellImpl.h"
 #include "Policies/Singleton.h"
@@ -190,7 +188,7 @@ void SpellCastTargets::read(ByteBuffer& data, Unit* caster)
     if (m_targetMask & (TARGET_FLAG_UNIT | TARGET_FLAG_UNK2))
         { data >> m_unitTargetGUID.ReadAsPacked(); }
 
-    if (m_targetMask & (TARGET_FLAG_OBJECT | TARGET_FLAG_OBJECT_UNK))
+    if (m_targetMask & (TARGET_FLAG_OBJECT | TARGET_FLAG_OBJECT_UNK | TARGET_FLAG_GAMEOBJECT_ITEM))
         { data >> m_GOTargetGUID.ReadAsPacked(); }
 
     if ((m_targetMask & (TARGET_FLAG_ITEM | TARGET_FLAG_TRADE_ITEM)) && caster->GetTypeId() == TYPEID_PLAYER)
@@ -690,7 +688,7 @@ void Spell::prepareDataForTriggerSystem()
 {
     //==========================================================================================
     // Now fill data for trigger system, need know:
-    // an spell trigger another or not ( m_canTrigger )
+    // a spell trigger another or not ( m_canTrigger )
     // Create base triggers flags for Attacker and Victim ( m_procAttacker and  m_procVictim)
     //==========================================================================================
     // Fill flag can spell trigger or not
@@ -1026,7 +1024,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
     else                                                    // in 1.12.1 we need explicit miss info
     {
         if (real_caster)
-        { 
+        {
             // Warrior's execute must be returned as 20647 spell result since the client only displays info when receiving this id.
             // Done here because must be based on MeleeSpellHitResult of spell id's 5308/20658/20660/20661/20662.
             if(m_spellInfo->SpellFamilyName == SPELLFAMILY_WARRIOR && m_spellInfo->IsFitToFamilyMask(0x0000000020000000))
@@ -1189,7 +1187,7 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, bool isReflected)
     // Recheck immune (only for delayed spells)
     float speed = m_spellInfo->speed == 0.0f && m_triggeredBySpellInfo ? m_triggeredBySpellInfo->speed : m_spellInfo->speed;
     if (speed && (
-            unit->IsImmunedToDamage(GetSpellSchoolMask(m_spellInfo)) ||
+            unit->IsImmuneToDamage(GetSpellSchoolMask(m_spellInfo)) ||
             unit->IsImmuneToSpell(m_spellInfo, unit == realCaster)))
     {
         if (realCaster)
@@ -1223,7 +1221,7 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, bool isReflected)
             }
 
             // not break stealth by cast targeting
-            if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX_NOT_BREAK_STEALTH))
+            if(!(m_spellInfo->AttributesEx & SPELL_ATTR_EX_NOT_BREAK_STEALTH) && m_spellInfo->Id != 51690 && m_spellInfo->Id != 53055)
                 { unit->RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH); }
 
             // can cause back attack (if detected), stealth removed at Spell::cast if spell break it
@@ -2433,13 +2431,6 @@ void Spell::SetTargetMap(SpellEffectIndex effIndex, uint32 targetMode, UnitList&
                     break;
                 case SPELL_EFFECT_TELEPORT_UNITS:
                 case SPELL_EFFECT_SUMMON:
-                    /*[-ZERO]  if (m_spellInfo->EffectMiscValueB[effIndex] == SUMMON_TYPE_POSESSED ||
-                          m_spellInfo->EffectMiscValueB[effIndex] == SUMMON_TYPE_POSESSED2)
-                      {
-                          if(m_targets.getUnitTarget())
-                              targetUnitMap.push_back(m_targets.getUnitTarget());
-                      }
-                      else */
                     targetUnitMap.push_back(m_caster);
                     break;
                 case SPELL_EFFECT_SUMMON_CHANGE_ITEM:
@@ -2666,11 +2657,15 @@ void Spell::prepare(SpellCastTargets const* targets, Aura* triggeredByAura)
 
         TriggerGlobalCooldown();
     }
+    // execute triggered without cast time explicitly in call point
     else
     {
         if (m_timer == 0)
             cast(true);
     }
+    // else triggered with cast time will execute execute at next tick or later
+    // without adding to cast type slot
+    // will not show cast bar but will show effects at casting time etc
 }
 
 void Spell::cancel()
@@ -2796,7 +2791,7 @@ void Spell::cast(bool skipCheck)
         }
 		case SPELLFAMILY_ROGUE:
 	            {
-	            // exit stealth on sap when improved sap is not skilled 
+	            // exit stealth on sap when improved sap is not skilled
 	            if (m_spellInfo->SpellFamilyFlags & UI64LIT(0x00000080) && m_caster->GetTypeId() == TYPEID_PLAYER && (!m_caster->GetAura(14076, SpellEffectIndex(0)) && !m_caster->GetAura(14094, SpellEffectIndex(0)) && !m_caster->GetAura(14095, SpellEffectIndex(0))))
 	            m_caster->RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH);
 	            }
@@ -3539,7 +3534,9 @@ void Spell::WriteSpellGoTargets(WorldPacket* data)
             ihit->missCondition = SPELL_MISS_IMMUNE2;
         }
         else if (ihit->missCondition == SPELL_MISS_NONE)    // Add only hits
-            { m_needAliveTargetMask |= ihit->effectMask; }
+        {
+            m_needAliveTargetMask |= ihit->effectMask;
+        }
     }
 
     for (GOTargetList::const_iterator ighit = m_UniqueGOTargetInfo.begin(); ighit != m_UniqueGOTargetInfo.end(); ++ighit)
@@ -4028,8 +4025,15 @@ void Spell::HandleThreatSpells()
     }
 
     // before 2.0.1 threat from positive effects not dependent from targets amount
+    // since 2.0.1 threat from positive effects also is distributed among all targets, so the overall caused threat is at most the defined bonus
+#if defined(TBC)
     if (!positive)
-        { threat /= m_UniqueTargetInfo.size(); }
+    {
+#endif
+        threat /= m_UniqueTargetInfo.size();
+#if defined(TBC)
+    }
+#endif
 
     for (TargetList::const_iterator ihit = m_UniqueTargetInfo.begin(); ihit != m_UniqueTargetInfo.end(); ++ihit)
     {
@@ -4178,11 +4182,11 @@ SpellCastResult Spell::CheckCast(bool strict)
         VMAP::VMapFactory::createOrGetVMapManager()->isLineOfSightCalcEnabled())
     {
         if (m_spellInfo->HasAttribute(SPELL_ATTR_OUTDOORS_ONLY) &&
-            !m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
+            !m_caster->GetMap()->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
             { return SPELL_FAILED_ONLY_OUTDOORS; }
 
         if (m_spellInfo->HasAttribute(SPELL_ATTR_INDOORS_ONLY) &&
-            m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
+            m_caster->GetMap()->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
             { return SPELL_FAILED_ONLY_INDOORS; }
     }
     // only check at first call, Stealth auras are already removed at second call
@@ -4302,7 +4306,7 @@ SpellCastResult Spell::CheckCast(bool strict)
             // Fill possible dispel list
             bool isDispell = false;
             bool isEmpty = true;
-        
+
             // As of Patch 1.10.0, dispel effects now check if there is something to dispel first
             for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
             {
@@ -4355,7 +4359,7 @@ SpellCastResult Spell::CheckCast(bool strict)
             }
 
             // Ok if exist some buffs for dispel try dispel it
-            if (isDispell && 
+            if (isDispell &&
                 isEmpty)
             {
                 return SPELL_FAILED_NOTHING_TO_DISPEL;
@@ -4376,7 +4380,7 @@ SpellCastResult Spell::CheckCast(bool strict)
             { return SPELL_FAILED_IMMUNE; }
 
 #if defined(CLASSIC)
-        // Power Infusion: As of patch 1.10, this is no longer usable if the target 
+        // Power Infusion: As of patch 1.10, this is no longer usable if the target
         // has Arcane Power aura from mage.
         if (m_spellInfo->Id == 10060)    // 10060 = Power Infusion
         {
@@ -4434,7 +4438,7 @@ SpellCastResult Spell::CheckCast(bool strict)
         else if (m_caster == target)
         {
             if (m_caster->GetTypeId() == TYPEID_PLAYER && m_caster->IsInWorld())
-            {                        
+            {
                 // Additional check for some spells
                 // If 0 spell effect empty - client not send target data (need use selection)
                 // TODO: check it on next client version
@@ -4443,7 +4447,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                 {
                     target = m_caster->GetMap()->GetUnit(((Player*)m_caster)->GetSelectionGuid());
                     if (!target)
-                        { return SPELL_FAILED_BAD_TARGETS; }                    
+                        { return SPELL_FAILED_BAD_TARGETS; }
 
                     // Arcane Missile self cast forbidden
                     if (m_spellInfo->SpellFamilyName == SPELLFAMILY_MAGE &&
@@ -4569,12 +4573,16 @@ SpellCastResult Spell::CheckCast(bool strict)
         // Must be behind the target.
         if (m_spellInfo->AttributesEx2 == SPELL_ATTR_EX2_UNK20 && m_spellInfo->HasAttribute(SPELL_ATTR_EX_UNK9) && target->HasInArc(M_PI_F, m_caster))
         {
+#if defined(TBC)
             // Exclusion for Pounce: Facing Limitation was removed in 2.0.1, but it still uses the same, old Ex-Flags
             if (!m_spellInfo->IsFitToFamily(SPELLFAMILY_DRUID, UI64LIT(0x0000000000020000)))
             {
+#endif
                 SendInterrupted(2);
                 return SPELL_FAILED_NOT_BEHIND;
+#if defined(TBC)
             }
+#endif
         }
 
         // Target must be facing you.
@@ -4588,8 +4596,8 @@ SpellCastResult Spell::CheckCast(bool strict)
         if (non_caster_target && m_spellInfo->HasAttribute(SPELL_ATTR_EX_NOT_IN_COMBAT_TARGET) && target->IsInCombat())
             { return SPELL_FAILED_TARGET_AFFECTING_COMBAT; }
 
-        // check if target is affected by Spirit of Redemption (Aura: 27827)  
-        if (target->HasAuraType(SPELL_AURA_SPIRIT_OF_REDEMPTION))  
+        // check if target is affected by Spirit of Redemption (Aura: 27827)
+        if (target->HasAuraType(SPELL_AURA_SPIRIT_OF_REDEMPTION))
             { return SPELL_FAILED_BAD_TARGETS; }
 
     }
@@ -4872,11 +4880,13 @@ SpellCastResult Spell::CheckCast(bool strict)
                     if (!m_targets.getUnitTarget() || m_targets.getUnitTarget()->GetHealth() > m_targets.getUnitTarget()->GetMaxHealth() * 0.2)
                         { return SPELL_FAILED_BAD_TARGETS; }
                 }
+#if defined(TBC)
                 else if (m_spellInfo->Id == 51582)          // Rocket Boots Engaged
                 {
                     if (m_caster->IsInWater())
                         { return SPELL_FAILED_ONLY_ABOVEWATER; }
                 }
+#endif
                 else if (m_spellInfo->SpellIconID == 156)   // Holy Shock
                 {
                     // spell different for friends and enemies
@@ -5461,8 +5471,8 @@ SpellCastResult Spell::CheckCast(bool strict)
                 if (expectedTarget->GetTypeId() == TYPEID_PLAYER)
                 {
                     Player const* player = static_cast<Player const*>(expectedTarget);
-                    
-                    // Player is not allowed to cast water walk on shapeshifted/mounted player 
+
+                    // Player is not allowed to cast water walk on shapeshifted/mounted player
                     if (player->GetShapeshiftForm() != FORM_NONE || player->IsMounted())
                         { return SPELL_FAILED_BAD_TARGETS; }
                 }
@@ -5805,19 +5815,21 @@ SpellCastResult Spell::CheckRange(bool strict)
             }
             break;                                          // let continue in generic way for no target
         }
-	case SPELL_RANGE_IDX_SHORT:
-	{
-		if ((m_spellInfo->SpellFamilyName == SPELLFAMILY_HUNTER && (m_spellInfo->SpellFamilyFlags & UI64LIT(0x00000080) || m_spellInfo->SpellFamilyFlags & 0x800000)))
-		{
-			Pet* pet = m_caster->GetPet();
-			if (pet)
-			{
-				float max_range = GetSpellMaxRange(sSpellRangeStore.LookupEntry(SPELL_RANGE_IDX_SHORT));
-				return m_caster->IsWithinDistInMap(pet, max_range) ? SPELL_CAST_OK : SPELL_FAILED_OUT_OF_RANGE;
-			}
-		}
-		break;
-	}        
+#if defined(CLASSIC)
+        case SPELL_RANGE_IDX_SHORT:
+        {
+            if ((m_spellInfo->SpellFamilyName == SPELLFAMILY_HUNTER && (m_spellInfo->SpellFamilyFlags & UI64LIT(0x00000080) || m_spellInfo->SpellFamilyFlags & 0x800000)))
+            {
+                Pet* pet = m_caster->GetPet();
+                if (pet)
+                {
+                    float max_range = GetSpellMaxRange(sSpellRangeStore.LookupEntry(SPELL_RANGE_IDX_SHORT));
+                    return m_caster->IsWithinDistInMap(pet, max_range) ? SPELL_CAST_OK : SPELL_FAILED_OUT_OF_RANGE;
+                }
+            }
+        break;
+        }
+#endif
     }
 
     // add radius of caster and ~5 yds "give" for non stricred (landing) check
@@ -7265,7 +7277,7 @@ void Spell::GetSpellRangeAndRadius(SpellEffectIndex effIndex, float& radius, uin
             break;
     }
 }
-
+#if defined(CLASSIC)
 SpellCastResult Spell::CanTameUnit(bool isGM)
 {
     // Spell can be triggered, we need to check original caster prior to caster
@@ -7325,3 +7337,4 @@ SpellCastResult Spell::CanTameUnit(bool isGM)
     }
     return SPELL_CAST_OK;
 }
+#endif

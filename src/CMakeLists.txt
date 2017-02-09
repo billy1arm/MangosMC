@@ -1,7 +1,7 @@
 # MaNGOS is a full featured server for World of Warcraft, supporting
 # the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
 #
-# Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+# Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,8 +19,10 @@
 
 # Needs to link against mangos_world.lib
 if(WIN32)
-  link_directories("${CMAKE_BINARY_DIR}/src/mangosd/${CMAKE_CFG_INTDIR}")
-  include_directories(${CMAKE_SOURCE_DIR}/dep/include)
+    if(BUILD_MANGOSD OR BUILD_TOOLS)
+        link_directories("${CMAKE_BINARY_DIR}/src/mangosd/${CMAKE_CFG_INTDIR}")
+        include_directories(${CMAKE_SOURCE_DIR}/dep/include)
+    endif()
 endif()
 
 # Build the mangos framework library
@@ -29,17 +31,21 @@ add_subdirectory(framework)
 # Build the mangos shared library
 add_subdirectory(shared)
 
-# Build the mangos game library
-add_subdirectory(game)
-
 # Build the mangos realm authentication server
-add_subdirectory(realmd)
+if(BUILD_REALMD)
+    add_subdirectory(realmd)
+endif()
 
-# Build the mangos world server
-add_subdirectory(mangosd)
+if(BUILD_MANGOSD)
+    # Build the mangos game library
+    add_subdirectory(game)
 
-# Build the selected modules
-add_subdirectory(modules)
+    # Build the mangos world server
+    add_subdirectory(mangosd)
+
+    # Build the selected modules
+    add_subdirectory(modules)
+endif()
 
 # If we want the tools for map/vmap/mmap extraction
 if(BUILD_TOOLS)

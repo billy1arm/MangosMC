@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,6 +47,12 @@ enum InstanceConditionIDs                                   // Suggested values 
     // to check for which team the instance is doing scripts
     INSTANCE_CONDITION_ID_TEAM_HORDE        = 67,
     INSTANCE_CONDITION_ID_TEAM_ALLIANCE     = 469,
+
+#if (!defined(CLASSIC))
+    // to check water event in SSC
+    INSTANCE_CONDITION_ID_LURKER            = 21217,
+    INSTANCE_CONDITION_ID_SCALDING_WATER    = 37284,
+#endif
 };
 
 class InstanceData

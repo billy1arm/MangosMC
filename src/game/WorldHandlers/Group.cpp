@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,6 @@
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "Player.h"
-#include "World.h"
 #include "ObjectMgr.h"
 #include "ObjectGuid.h"
 #include "Group.h"
@@ -36,7 +35,6 @@
 #include "BattleGround/BattleGround.h"
 #include "MapManager.h"
 #include "MapPersistentStateMgr.h"
-#include "Util.h"
 #include "LootMgr.h"
 #include "LFGMgr.h"
 #include "LFGHandler.h"
@@ -295,8 +293,16 @@ bool Group::AddMember(ObjectGuid guid, const char* name, uint8 joinMethod)
         if (!IsLeader(player->GetObjectGuid()) && !isBGGroup())
         {
             // reset the new member's instances, unless he is currently in one of them
-            // including raid instances that they are not permanently bound to!
+            // including raid/heroic instances that they are not permanently bound to!
             player->ResetInstances(INSTANCE_RESET_GROUP_JOIN);
+
+#if (!defined(CLASSIC))
+            if (player->getLevel() >= LEVELREQUIREMENT_HEROIC && player->GetDifficulty() != GetDifficulty())
+            {
+                player->SetDifficulty(GetDifficulty());
+                player->SendDungeonDifficulty(true);
+            }
+#endif
         }
         player->SetGroupUpdateFlag(GROUP_UPDATE_FULL);
         UpdatePlayerOutOfRange(player);
@@ -310,6 +316,7 @@ bool Group::AddMember(ObjectGuid guid, const char* name, uint8 joinMethod)
         if (isRaidGroup())
             { player->UpdateForQuestWorldObjects(); }
 
+#if defined(CLASSIC)
         if(isInLFG())
         {
             if(joinMethod == GROUP_LFG)
@@ -323,6 +330,7 @@ bool Group::AddMember(ObjectGuid guid, const char* name, uint8 joinMethod)
                 sLFGMgr.UpdateGroup(m_Id);
             }
         }
+#endif
     }
 
     return true;
@@ -479,7 +487,7 @@ void Group::Disband(bool hideDestroy)
             data.Initialize(SMSG_GROUP_LIST, 24);
             data << uint64(0) << uint64(0) << uint64(0);
             player->GetSession()->SendPacket(&data);
-
+#if defined(CLASSIC)
             if(isInLFG())
             {
                 sLFGMgr.RemoveGroupFromQueue(m_Id);
@@ -489,6 +497,7 @@ void Group::Disband(bool hideDestroy)
 
                 player->GetSession()->SendPacket(&data);
             }
+#endif
         }
 
         _homebindIfInstance(player);
@@ -516,6 +525,7 @@ void Group::Disband(bool hideDestroy)
     m_leaderName.clear();
 }
 
+#if defined(CLASSIC)
 /**
  * \fn void Group::SendUpdateToPlayer(Player * player)
  * \brief This method notifies the player of his group status.
@@ -543,7 +553,7 @@ void Group::SendUpdateToPlayer(Player* pPlayer)
     // guess size
     WorldPacket data(SMSG_GROUP_LIST, (1 + 1 + 1 + 4 + GetMembersCount() * 20) + 8 + 1 + 8 + 1);
     data << (uint8)m_groupType;                         // group type
-    data << (uint8)(subGroup | (IsAssistant(pPlayer->GetGUID()) ? 0x80 : 0)); // own flags (groupid | (assistant?0x80:0))
+    data << (uint8)(subGroup | (IsAssistant(pPlayer->GetObjectGuid()) ? 0x80 : 0)); // own flags (groupid | (assistant?0x80:0))
 
     data << uint32(GetMembersCount() - 1);
     for (member_citerator citr = m_memberSlots.begin(); citr != m_memberSlots.end(); ++citr)
@@ -701,6 +711,7 @@ void Group::FillPremadeLFG(ObjectGuid plrGuid, ClassRoles requiredRole, uint32& 
         }
     }
 }
+#endif
 
 /*********************************************************/
 /***                   LOOT SYSTEM                     ***/
@@ -712,7 +723,11 @@ void Group::SendLootStartRoll(uint32 CountDown, const Roll& r)
     data << r.lootedTargetGUID;                             // creature guid what we're looting
     data << uint32(r.itemSlot);                             // item slot in loot
     data << uint32(r.itemid);                               // the itemEntryId for the item that shall be rolled for
+#if defined(CLASSIC)
     data << uint32(0);                                      // randomSuffix - not used ?
+#else
+    data << uint32(r.itemRandomSuffix);                     // randomSuffix
+#endif
     data << uint32(r.itemRandomPropId);                     // item random property ID
     data << uint32(CountDown);                              // the countdown time to choose "need" or "greed"
 
@@ -736,10 +751,17 @@ void Group::SendLootRoll(ObjectGuid const& targetGuid, uint8 rollNumber, uint8 r
     data << uint32(r.itemSlot);                             // unknown, maybe amount of players, or item slot in loot
     data << targetGuid;
     data << uint32(r.itemid);                               // the itemEntryId for the item that shall be rolled for
+#if defined(CLASSIC)
     data << uint32(0);                                      // randomSuffix - not used?
+#else
+    data << uint32(r.itemRandomSuffix);                     // randomSuffix
+#endif
     data << uint32(r.itemRandomPropId);                     // Item random property ID
     data << uint8(rollNumber);                              // 0: "Need for: [item name]" > 127: "you passed on: [item name]"      Roll number
     data << uint8(rollType);                                // 0: "Need for: [item name]" 0: "You have selected need for [item name] 1: need roll 2: greed roll
+#if (!defined(CLASSIC))
+    data << uint8(0);                                       // auto pass on loot
+#endif
 
     for (Roll::PlayerVote::const_iterator itr = r.playerVote.begin(); itr != r.playerVote.end(); ++itr)
     {
@@ -758,7 +780,11 @@ void Group::SendLootRollWon(ObjectGuid const& targetGuid, uint8 rollNumber, Roll
     data << r.lootedTargetGUID;                             // object guid what we're looting
     data << uint32(r.itemSlot);                             // item slot in loot
     data << uint32(r.itemid);                               // the itemEntryId for the item that shall be rolled for
+#if defined(CLASSIC)
     data << uint32(0);                                      // randomSuffix - not used ?
+#else
+    data << uint32(r.itemRandomSuffix);                     // randomSuffix
+#endif
     data << uint32(r.itemRandomPropId);                     // Item random property
     data << targetGuid;                                     // guid of the player who won.
     data << uint8(rollNumber);                              // rollnumber related to SMSG_LOOT_ROLL
@@ -782,7 +808,11 @@ void Group::SendLootAllPassed(Roll const& r)
     data << uint32(r.itemSlot);                             // item slot in loot
     data << uint32(r.itemid);                               // The itemEntryId for the item that shall be rolled for
     data << uint32(r.itemRandomPropId);                     // Item random property ID
+#if defined(CLASSIC)
     data << uint32(0);                                      // Item random suffix ID - not used ?
+#else
+    data << uint32(r.itemRandomSuffix);                     // Item random suffix ID
+#endif
 
     for (Roll::PlayerVote::const_iterator itr = r.playerVote.begin(); itr != r.playerVote.end(); ++itr)
     {
@@ -1043,7 +1073,7 @@ void Group::CountTheRoll(Rolls::iterator& rollI)
 
             if (Player* player = sObjectMgr.GetPlayer(maxguid))
             {
-                if (Object* object = player->GetMap()->GetWorldObject(roll->lootedTargetGUID))
+                if (WorldObject* object = player->GetMap()->GetWorldObject(roll->lootedTargetGUID))
                 {
                     SendLootRollWon(maxguid, maxresul, ROLL_NEED, *roll);
                     won = true;
@@ -1060,10 +1090,8 @@ void Group::CountTheRoll(Rolls::iterator& rollI)
                             Item* newitem = player->StoreNewItem(dest, roll->itemid, true, item->randomPropertyId);
                             player->SendNewItem(newitem, uint32(item->count), false, false, true);
 
-                            if (object->GetTypeId() == TYPEID_UNIT)
+                            if (Creature* creature = object->ToCreature())
                             {
-                                /// Warn players about the loot status on the corpse.
-                                Creature * creature = object->ToCreature();
                                 /// If creature has been fully looted, remove flag.
                                 if (creature->loot.isLooted())
                                 {
@@ -1108,7 +1136,7 @@ void Group::CountTheRoll(Rolls::iterator& rollI)
 
             if (Player* player = sObjectMgr.GetPlayer(maxguid))
             {
-                if (Object * object = player->GetMap()->GetWorldObject(roll->lootedTargetGUID))
+                if (WorldObject* object = player->GetMap()->GetWorldObject(roll->lootedTargetGUID))
                 {
                     SendLootRollWon(maxguid, maxresul, ROLL_GREED, *roll);
                     won = true;
@@ -1124,10 +1152,8 @@ void Group::CountTheRoll(Rolls::iterator& rollI)
                             --roll->getLoot()->unlootedCount;
                             Item* newitem = player->StoreNewItem(dest, roll->itemid, true, item->randomPropertyId);
                             player->SendNewItem(newitem, uint32(item->count), false, false, true);
-                            if (object->GetTypeId() == TYPEID_UNIT)
+                            if (Creature* creature = object->ToCreature())
                             {
-                                /// Warn players about the loot status on the corpse.
-                                Creature * creature = object->ToCreature();
                                 /// If creature has been fully looted, remove flag.
                                 if (creature->loot.isLooted())
                                 {

@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,6 @@
 #include "ObjectMgr.h"
 #include "ObjectGuid.h"
 #include "Player.h"
-#include "UpdateMask.h"
 #include "GridNotifiersImpl.h"
 #include "CellImpl.h"
 #include "AccountMgr.h"
@@ -190,7 +189,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "level",          SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleCharacterLevelCommand,      "", NULL },
         { "rename",         SEC_GAMEMASTER,     true,  &ChatHandler::HandleCharacterRenameCommand,     "", NULL },
         { "reputation",     SEC_GAMEMASTER,     true,  &ChatHandler::HandleCharacterReputationCommand, "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "titles",         SEC_GAMEMASTER,     true,  &ChatHandler::HandleCharacterTitlesCommand,     "", NULL },
 #endif
         { NULL,             0,                  false, NULL,                                           "", NULL }
@@ -221,7 +220,7 @@ ChatCommand* ChatHandler::getCommandTable()
     static ChatCommand debugCommandTable[] =
     {
         { "anim",           SEC_GAMEMASTER,     false, &ChatHandler::HandleDebugAnimCommand,                "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "arena",          SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugArenaCommand,               "", NULL },
 #endif
         { "bg",             SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugBattlegroundCommand,        "", NULL },
@@ -282,12 +281,18 @@ ChatCommand* ChatHandler::getCommandTable()
     static ChatCommand gobjectCommandTable[] =
     {
         { "add",            SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectAddCommand,       "", NULL },
+#if defined(CLASSIC)
         { "anim",           SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectAnimationCommand, "", NULL },
+#endif
         { "delete",         SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectDeleteCommand,    "", NULL },
+#if defined(CLASSIC)
         { "lootstate",      SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectLootstateCommand, "", NULL },
+#endif
         { "move",           SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectMoveCommand,      "", NULL },
         { "near",           SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectNearCommand,      "", NULL },
+#if defined(CLASSIC)
         { "state",          SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectStateCommand,     "", NULL },
+#endif
         { "target",         SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectTargetCommand,    "", NULL },
         { "turn",           SEC_GAMEMASTER,     false, &ChatHandler::HandleGameObjectTurnCommand,      "", NULL },
         { NULL,             0,                  false, NULL,                                           "", NULL }
@@ -307,7 +312,7 @@ ChatCommand* ChatHandler::getCommandTable()
     {
         { "add",            SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorAddCommand,            "", NULL },
         { "addkill",        SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorAddKillCommand,        "", NULL },
-#if defined (CLASSIC)
+#if defined(CLASSIC)
         { "show",           SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorShow,                  "", NULL },
 #endif
         { "update",         SEC_GAMEMASTER,     false, &ChatHandler::HandleHonorUpdateCommand,         "", NULL },
@@ -381,7 +386,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "spell",          SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleLookupSpellCommand,         "", NULL },
         { "taxinode",       SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleLookupTaxiNodeCommand,      "", NULL },
         { "tele",           SEC_MODERATOR,      true,  &ChatHandler::HandleLookupTeleCommand,          "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "title",          SEC_GAMEMASTER,     true,  &ChatHandler::HandleLookupTitleCommand,         "", NULL },
 #endif
         { NULL,             0,                  false, NULL,                                           "", NULL }
@@ -410,7 +415,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "swim",           SEC_MODERATOR,      false, &ChatHandler::HandleModifySwimCommand,          "", NULL },
         { "scale",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyScaleCommand,         "", NULL },
         { "bwalk",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyBWalkCommand,         "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "fly",            SEC_MODERATOR,      false, &ChatHandler::HandleModifyFlyCommand,           "", NULL },
 #endif
         { "aspeed",         SEC_MODERATOR,      false, &ChatHandler::HandleModifyASpeedCommand,        "", NULL },
@@ -419,7 +424,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "mount",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyMountCommand,         "", NULL },
         { "honor",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyHonorCommand,         "", NULL },
         { "rep",            SEC_GAMEMASTER,     false, &ChatHandler::HandleModifyRepCommand,           "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "arena",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyArenaCommand,         "", NULL },
 #endif
         { "drunk",          SEC_MODERATOR,      false, &ChatHandler::HandleModifyDrunkCommand,         "", NULL },
@@ -508,6 +513,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "areatrigger_quest_end",       SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadQuestAreaTriggersCommand,       "", NULL },
         { "areatrigger_tavern",          SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadAreaTriggerTavernCommand,       "", NULL },
         { "areatrigger_teleport",        SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadAreaTriggerTeleportCommand,     "", NULL },
+        { "autobroadcast",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadAutoBroadcastCommand,           "", NULL },
         { "command",                     SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadCommandCommand,                 "", NULL },
         { "conditions",                  SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadConditionsCommand,              "", NULL },
         { "creature_ai_scripts",         SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadEventAIScriptsCommand,          "", NULL },
@@ -548,7 +554,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "locales_page_text",           SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesPageTextCommand,         "", NULL },
         { "locales_points_of_interest",  SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesPointsOfInterestCommand, "", NULL },
         { "locales_quest",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLocalesQuestCommand,            "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "mail_level_reward",           SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadMailLevelRewardCommand,         "", NULL },
 #endif
         { "mail_loot_template",          SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesMailCommand,       "", NULL },
@@ -560,7 +566,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "page_text",                   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadPageTextsCommand,               "", NULL },
         { "pickpocketing_loot_template", SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesPickpocketingCommand, "", NULL},
         { "points_of_interest",          SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadPointsOfInterestCommand,        "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "prospecting_loot_template",   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadLootTemplatesProspectingCommand, "", NULL },
 #endif
         { "quest_template",              SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadQuestTemplateCommand,           "", NULL },
@@ -568,10 +574,8 @@ ChatCommand* ChatHandler::getCommandTable()
         { "reserved_name",               SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadReservedNameCommand,            "", NULL },
         { "reputation_reward_rate",      SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadReputationRewardRateCommand,    "", NULL },
         { "reputation_spillover_template", SEC_ADMINISTRATOR, true, &ChatHandler::HandleReloadReputationSpilloverTemplateCommand, "", NULL },
-#if defined (CLASSIC)
         { "script_binding",              SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadScriptBindingCommand,           "", NULL },
-#endif
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "skill_discovery_template",    SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadSkillDiscoveryTemplateCommand,  "", NULL },
         { "skill_extra_item_template",   SEC_ADMINISTRATOR, true,  &ChatHandler::HandleReloadSkillExtraItemTemplateCommand,  "", NULL },
 #endif
@@ -706,7 +710,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { NULL,             0,                  false, NULL,                                            "", NULL }
     };
 
-#if defined (TBC)
+#if (!defined(CLASSIC))
     static ChatCommand titlesCommandTable[] =
     {
         { "add",            SEC_GAMEMASTER,     false, &ChatHandler::HandleTitlesAddCommand,           "", NULL },
@@ -716,7 +720,6 @@ ChatCommand* ChatHandler::getCommandTable()
         { NULL,             0,                  false, NULL,                                           "", NULL }
     };
 #endif
-
     static ChatCommand triggerCommandTable[] =
     {
         { "active",         SEC_GAMEMASTER,     false, &ChatHandler::HandleTriggerActiveCommand,       "", NULL },
@@ -769,7 +772,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "reset",          SEC_ADMINISTRATOR,  true,  NULL,                                           "", resetCommandTable    },
         { "server",         SEC_PLAYER,         true,  NULL,                                           "", serverCommandTable   },
         { "tele",           SEC_MODERATOR,      true,  NULL,                                           "", teleCommandTable     },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "titles",         SEC_GAMEMASTER,     false, NULL,                                           "", titlesCommandTable   },
 #endif
         { "trigger",        SEC_GAMEMASTER,     false, NULL,                                           "", triggerCommandTable  },
@@ -828,7 +831,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "cometome",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleComeToMeCommand,            "", NULL },
         { "damage",         SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDamageCommand,              "", NULL },
         { "combatstop",     SEC_GAMEMASTER,     false, &ChatHandler::HandleCombatStopCommand,          "", NULL },
-#if defined (TBC)
+#if (!defined(CLASSIC))
         { "flusharenapoints", SEC_ADMINISTRATOR, false, &ChatHandler::HandleFlushArenaPointsCommand,    "", NULL },
 #endif
         { "repairitems",    SEC_GAMEMASTER,     true,  &ChatHandler::HandleRepairitemsCommand,         "", NULL },
@@ -836,7 +839,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "waterwalk",      SEC_GAMEMASTER,     false, &ChatHandler::HandleWaterwalkCommand,           "", NULL },
         { "quit",           SEC_CONSOLE,        true,  &ChatHandler::HandleQuitCommand,                "", NULL },
         { "mmap",           SEC_GAMEMASTER,     false, NULL,                                           "", mmapCommandTable },
-#if defined (CLASSIC)
+#if defined(CLASSIC)
         { "spell_linked",   SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleReloadSpellLinkedCommand,   "", NULL },
 #endif
 #ifdef ENABLE_PLAYERBOTS
@@ -1010,16 +1013,17 @@ void ChatHandler::SendGlobalSysMessage(const char* str, AccountTypes minSec)
     // need copy to prevent corruption by strtok call in LineFromMessage original string
     char* buf = mangos_strdup(str);
     char* pos = buf;
-    ObjectGuid guid = m_session ? m_session->GetPlayer()->GetObjectGuid() : ObjectGuid();
+    ObjectGuid senderGuid = m_session ? m_session->GetPlayer()->GetObjectGuid() : ObjectGuid();
 
     while (char* line = LineFromMessage(pos))
     {
-#if defined (TBC)
+#if (!defined(CLASSIC))
+        // m_session == null when we're accessing these command from the console.
+        ObjectGuid senderGuid;
         if (m_session)
-            guid = m_session->GetPlayer()->GetObjectGuid();
-        
+            senderGuid = m_session->GetPlayer()->GetObjectGuid();
 #endif
-        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line, LANG_UNIVERSAL, CHAT_TAG_NONE, guid);
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line, LANG_UNIVERSAL, CHAT_TAG_NONE, senderGuid);
         sWorld.SendGlobalMessage(&data, minSec);
     }
 
@@ -1544,10 +1548,9 @@ bool ChatHandler::isValidChatMessage(const char* message)
     Quest const* linkedQuest = NULL;
     SpellEntry const* linkedSpell = NULL;
     ItemRandomPropertiesEntry const* itemProperty = NULL;
-#if defined (TBC)
+#if (!defined(CLASSIC))
     ItemRandomSuffixEntry const* itemSuffix = NULL;
 #endif
-
     while (!reader.eof())
     {
         if (validSequence == validSequenceIterator)
@@ -1556,10 +1559,9 @@ bool ChatHandler::isValidChatMessage(const char* message)
             linkedQuest = NULL;
             linkedSpell = NULL;
             itemProperty = NULL;
-#if defined (TBC)
+#if (!defined(CLASSIC))
             itemSuffix = NULL;
 #endif
-
             reader.ignore(255, '|');
         }
         else if (reader.get() != '|')
@@ -1697,7 +1699,7 @@ bool ChatHandler::isValidChatMessage(const char* message)
                         if (!itemProperty)
                             { return false; }
                     }
-#if defined (TBC)
+#if (!defined(CLASSIC))
                     else if (propertyId < 0)
                     {
                         itemSuffix = sItemRandomSuffixStore.LookupEntry(-propertyId);
@@ -1705,7 +1707,6 @@ bool ChatHandler::isValidChatMessage(const char* message)
                             return false;
                     }
 #endif
-
                     // ignore other integers
                     while ((c >= '0' && c <= '9') || c == ':')
                     {
@@ -1930,11 +1931,11 @@ bool ChatHandler::isValidChatMessage(const char* message)
                     }
                     else if (linkedItem)
                     {
-#if defined (TBC)
+#if (!defined(CLASSIC))
                         char* const* suffix = itemSuffix ? itemSuffix->nameSuffix : (itemProperty ? itemProperty->nameSuffix : NULL);
 #endif
                         std::string expectedName = std::string(linkedItem->Name1);
-#if defined (TBC)
+#if (!defined(CLASSIC))
                         if (suffix)
                         {
                             expectedName += " ";
@@ -1954,7 +1955,7 @@ bool ChatHandler::isValidChatMessage(const char* message)
                                     { expectedName = linkedItem->Name1; }
                                 else
                                     { expectedName = il->Name[dbIndex]; }
-#if defined (TBC)
+#if (!defined(CLASSIC))
                                 if (suffix)
                                 {
                                     expectedName += " ";
@@ -2457,7 +2458,6 @@ char* ChatHandler::ExtractLinkArg(char** args, char const* const* linkTypes /*= 
 
     // key:data...|h[name]|h|r
     char* keyStart = tail;                                  // remember key start for return
-    char* keyEnd   = tail;                                  // key end for truncate, will updated
 
     while (*tail && *tail != '|' && *tail != ':')
         { ++tail; }
@@ -2465,7 +2465,7 @@ char* ChatHandler::ExtractLinkArg(char** args, char const* const* linkTypes /*= 
     if (!*tail)
         { return NULL; }
 
-    keyEnd = tail;                                          // remember key end for truncate
+    char* keyEnd = tail;                                    // remember key end for truncate
 
     // |h[name]|h|r or :something...|h[name]|h|r
 
@@ -3245,7 +3245,7 @@ static RaceMaskName const raceMaskNames[] =
     { "tauren", (1 << (RACE_TAUREN - 1))  },
     { "gnome", (1 << (RACE_GNOME - 1))   },
     { "troll", (1 << (RACE_TROLL - 1))   },
-#if defined (TBC)
+#if (!defined(CLASSIC))
     { "bloodelf", (1 << (RACE_BLOODELF - 1))},
     { "draenei", (1 << (RACE_DRAENEI - 1)) },
 #endif
@@ -3449,35 +3449,14 @@ void ChatHandler::LogCommand(char const* fullcmd)
 void ChatHandler::BuildChatPacket(WorldPacket& data, ChatMsg msgtype, char const* message, Language language /*= LANG_UNIVERSAL*/, ChatTagFlags chatTag /*= CHAT_TAG_NONE*/,
                                   ObjectGuid const& senderGuid /*= ObjectGuid()*/, char const* senderName /*= NULL*/,
                                   ObjectGuid const& targetGuid /*= ObjectGuid()*/, char const* /*targetName*/ /*= NULL*/,
-#if defined (CLASSIC)
                                   char const* channelName /*= NULL*/, uint8 playerRank /*= 0*/)
-#endif
-#if defined (TBC)
-                                  char const* channelName /*= NULL*/)
-#endif
 {
-#if defined (CLASSIC)
     data.Initialize(SMSG_MESSAGECHAT);
-#endif
-#if defined (TBC)
-    bool isGM = chatTag & CHAT_TAG_GM;
-
-    data.Initialize(isGM ? SMSG_GM_MESSAGECHAT : SMSG_MESSAGECHAT);
-#endif
     data << uint8(msgtype);
     data << uint32(language);
-#if defined (TBC)
-    data << ObjectGuid(senderGuid);
-    data << uint32(0);                                              // 2.1.0
-#endif
 
     switch (msgtype)
     {
-#if defined (TBC)
-    case CHAT_MSG_MONSTER_SAY:
-    case CHAT_MSG_MONSTER_PARTY:
-    case CHAT_MSG_MONSTER_YELL:
-#endif
         case CHAT_MSG_MONSTER_WHISPER:
         case CHAT_MSG_RAID_BOSS_WHISPER:
         case CHAT_MSG_RAID_BOSS_EMOTE:
@@ -3486,7 +3465,6 @@ void ChatHandler::BuildChatPacket(WorldPacket& data, ChatMsg msgtype, char const
             data << uint32(strlen(senderName) + 1);
             data << senderName;
             data << ObjectGuid(targetGuid);                         // Unit Target
-#if defined (CLASSIC)
             break;
     
         case CHAT_MSG_SAY:
@@ -3521,55 +3499,8 @@ void ChatHandler::BuildChatPacket(WorldPacket& data, ChatMsg msgtype, char const
     data << uint32(strlen(message) + 1);
     data << message;
     data << uint8(chatTag);
-#endif
-#if defined (TBC)
-    if (targetGuid && !targetGuid.IsPlayer() && !targetGuid.IsPet())
-    {
-        data << uint32(strlen(targetName) + 1);             // target name length
-        data << targetName;                                 // target name
-    }
-    MANGOS_ASSERT(message);
-    data << uint32(strlen(message) + 1);
-    data << message;
-    data << uint8(chatTag);
-    break;
-        case CHAT_MSG_BG_SYSTEM_NEUTRAL:
-        case CHAT_MSG_BG_SYSTEM_ALLIANCE:
-        case CHAT_MSG_BG_SYSTEM_HORDE:
-            data << ObjectGuid(targetGuid);                         // Unit Target
-            if (targetGuid && !targetGuid.IsPlayer())
-            {
-                MANGOS_ASSERT(targetName);
-                data << uint32(strlen(targetName) + 1);             // target name length
-                data << targetName;                                 // target name
-            }
-            MANGOS_ASSERT(message);
-            data << uint32(strlen(message) + 1);
-            data << message;
-            data << uint8(chatTag);
-            break;
-        default:
-            if (msgtype == CHAT_MSG_CHANNEL)
-            {
-                MANGOS_ASSERT(channelName);
-                data << channelName;
-            }
-            data << ObjectGuid(targetGuid);
-            MANGOS_ASSERT(message);
-            data << uint32(strlen(message) + 1);
-            data << message;
-            data << uint8(chatTag);
-            if (isGM)
-            {
-                MANGOS_ASSERT(senderName);
-                data << uint32(strlen(senderName) + 1);
-                data << senderName;
-            }
-            break;
-        }
-    }
-#endif
 }
+
 // Instantiate template for helper function
 template void ChatHandler::ShowNpcOrGoSpawnInformation<Creature>(uint32 guid);
 template void ChatHandler::ShowNpcOrGoSpawnInformation<GameObject>(uint32 guid);

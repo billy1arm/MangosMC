@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,6 @@
 #include "ObjectMgr.h"
 #include "ObjectGuid.h"
 #include "Player.h"
-#include "UpdateMask.h"
 #include "AuctionHouseMgr.h"
 #include "Mail.h"
 #include "Util.h"
@@ -209,7 +208,7 @@ void WorldSession::SendAuctionCancelledToBidderMail(AuctionEntry* auction)
 
 AuctionHouseEntry const* WorldSession::GetCheckedAuctionHouseForAuctioneer(ObjectGuid guid)
 {
-    Unit* auctioneer = NULL;
+    Unit* auctioneer;
 
     // GM case
     if (guid == GetPlayer()->GetObjectGuid())
@@ -313,8 +312,7 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recv_data)
     {
 #if defined(CLASSIC)
         SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_ITEM_NOT_FOUND);
-#endif
-#if defined(TBC)
+#else
         SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_CANNOT_TRADE_THAT);
 #endif
         return;
@@ -324,8 +322,7 @@ void WorldSession::HandleAuctionSellItem(WorldPacket& recv_data)
     {
 #if defined(CLASSIC)
         SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_ITEM_NOT_FOUND);
-#endif
-#if defined(TBC)
+#else
         SendAuctionCommandResult(NULL, AUCTION_STARTED, AUCTION_ERR_INVENTORY, EQUIP_ERR_CANNOT_TRADE_THAT);
 #endif
         return;
@@ -508,6 +505,7 @@ void WorldSession::HandleAuctionRemoveItem(WorldPacket& recv_data)
     CharacterDatabase.CommitTransaction();
     sAuctionMgr.RemoveAItem(auction->itemGuidLow);
     auctionHouse->RemoveAuction(auction->Id);
+
     // Used by Eluna
 #ifdef ENABLE_ELUNA
     sEluna->OnRemove(auctionHouse, auction);
@@ -565,7 +563,7 @@ void WorldSession::HandleAuctionListBidderItems(WorldPacket& recv_data)
     auctionHouse->BuildListBidderItems(data, pl, count, totalcount);
     data.put<uint32>(0, count);                             // add count to placeholder
     data << uint32(totalcount);
-#if defined(TBC)
+#if (!defined(CLASSIC))
     data << uint32(300);                                    // unk 2.3.0 delay for next isFull request?
 #endif
     SendPacket(&data);
@@ -595,8 +593,7 @@ void WorldSession::HandleAuctionListOwnerItems(WorldPacket& recv_data)
 
 #if defined(CLASSIC)
     WorldPacket data(SMSG_AUCTION_OWNER_LIST_RESULT, (4 + 4));
-#endif
-#if defined(TBC)
+#else
     WorldPacket data(SMSG_AUCTION_OWNER_LIST_RESULT, (4 + 4 + 4));
 #endif
     data << (uint32) 0;                                     // amount place holder
@@ -607,7 +604,7 @@ void WorldSession::HandleAuctionListOwnerItems(WorldPacket& recv_data)
     auctionHouse->BuildListOwnerItems(data, _player, count, totalcount);
     data.put<uint32>(0, count);
     data << uint32(totalcount);
-#if defined(TBC)
+#if (!defined(CLASSIC))
     data << uint32(300);                                    // 2.3.0 delay for next isFull request?
 #endif
     SendPacket(&data);
@@ -622,8 +619,7 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
     std::string searchedname;
 #if defined(CLASSIC)
     uint8 levelmin, levelmax, usable;
-#endif
-#if defined(TBC)
+#else
     uint8 levelmin, levelmax, usable, isFull, sortCount;
 #endif
     uint32 listfrom, auctionSlotID, auctionMainCategory, auctionSubCategory, quality;
@@ -636,8 +632,7 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
     recv_data >> auctionSlotID >> auctionMainCategory >> auctionSubCategory >> quality;
 #if defined(CLASSIC)
     recv_data >> usable;
-#endif
-#if defined(TBC)
+#else
     recv_data >> usable >> isFull >> sortCount;
 
     if (sortCount >= MAX_AUCTION_SORT)
@@ -666,7 +661,8 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
     // always return pointer
     AuctionHouseObject* auctionHouse = sAuctionMgr.GetAuctionsMap(auctionHouseEntry);
 
-#if defined(TBC)
+#if (!defined(CLASSIC))
+
     // Sort
     AuctionHouseObject::AuctionEntryMap const& aucs = auctionHouse->GetAuctions();
     std::vector<AuctionEntry*> auctions;
@@ -678,7 +674,6 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
     AuctionSorter sorter(Sort, GetPlayer());
     std::sort(auctions.begin(), auctions.end(), sorter);
 #endif
-
     // remove fake death
     if (GetPlayer()->hasUnitState(UNIT_STAT_DIED))
         { GetPlayer()->RemoveSpellsCausingAura(SPELL_AURA_FEIGN_DEATH); }
@@ -688,8 +683,7 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
 
 #if defined(CLASSIC)
     WorldPacket data(SMSG_AUCTION_LIST_RESULT, (4 + 4));
-#endif
-#if defined(TBC)
+#else
     WorldPacket data(SMSG_AUCTION_LIST_RESULT, (4 + 4 + 4));
 #endif
     uint32 count = 0;
@@ -708,15 +702,13 @@ void WorldSession::HandleAuctionListItems(WorldPacket& recv_data)
                                         wsearchedname, listfrom, levelmin, levelmax, usable,
                                         auctionSlotID, auctionMainCategory, auctionSubCategory, quality,
                                         count, totalcount);
-#endif
-#if defined(TBC)
+#else
     BuildListAuctionItems(auctions, data, wsearchedname, listfrom, levelmin, levelmax, usable,
                           auctionSlotID, auctionMainCategory, auctionSubCategory, quality, count, totalcount, isFull);
 #endif
-
     data.put<uint32>(0, count);
     data << uint32(totalcount);
-#if defined(TBC)
+#if (!defined(CLASSIC))
     data << uint32(300);                                    // 2.3.0 delay for next isFull request?
 #endif
     SendPacket(&data);

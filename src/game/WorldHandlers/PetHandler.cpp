@@ -2,7 +2,7 @@
  * MaNGOS is a full featured server for World of Warcraft, supporting
  * the following clients: 1.12.x, 2.4.3, 3.3.5a, 4.3.4a and 5.4.8
  *
- * Copyright (C) 2005-2016  MaNGOS project <https://getmangos.eu>
+ * Copyright (C) 2005-2017  MaNGOS project <https://getmangos.eu>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -339,7 +339,18 @@ void WorldSession::SendPetNameQuery(ObjectGuid petguid, uint32 petnumber)
     data << uint32(petnumber);
     data << name;
     data << uint32(pet->GetUInt32Value(UNIT_FIELD_PET_NAME_TIMESTAMP));
-
+#if defined(TBC)
+    if (pet->IsPet() && ((Pet*)pet)->GetDeclinedNames())
+    {
+        data << uint8(1);
+        for (int i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+            data << ((Pet*)pet)->GetDeclinedNames()->name[i];
+    }
+    else
+    {
+        data << uint8(0);
+    }
+#endif
     _player->GetSession()->SendPacket(&data);
 }
 
@@ -493,7 +504,34 @@ void WorldSession::HandlePetRename(WorldPacket& recv_data)
 
     pet->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_RENAME);
 
+#if defined(TBC)
+    if (isdeclined)
+    {
+        for (int i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+        {
+            recv_data >> declinedname.name[i];
+        }
+
+        std::wstring wname;
+        Utf8toWStr(name, wname);
+        if (!ObjectMgr::CheckDeclinedNames(GetMainPartOfName(wname, 0), declinedname))
+        {
+            SendPetNameInvalid(PET_NAME_DECLENSION_DOESNT_MATCH_BASE_NAME, name, &declinedname);
+            return;
+        }
+    }
+#endif
     CharacterDatabase.BeginTransaction();
+#if defined(TBC)
+    if (isdeclined)
+    {
+        for (int i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+            CharacterDatabase.escape_string(declinedname.name[i]);
+        CharacterDatabase.PExecute("DELETE FROM character_pet_declinedname WHERE owner = '%u' AND id = '%u'", _player->GetGUIDLow(), pet->GetCharmInfo()->GetPetNumber());
+        CharacterDatabase.PExecute("INSERT INTO character_pet_declinedname (id, owner, genitive, dative, accusative, instrumental, prepositional) VALUES ('%u','%u','%s','%s','%s','%s','%s')",
+                                   pet->GetCharmInfo()->GetPetNumber(), _player->GetGUIDLow(), declinedname.name[0].c_str(), declinedname.name[1].c_str(), declinedname.name[2].c_str(), declinedname.name[3].c_str(), declinedname.name[4].c_str());
+    }
+#endif
     CharacterDatabase.escape_string(name);
     CharacterDatabase.PExecute("UPDATE character_pet SET name = '%s', renamed = '1' WHERE owner = '%u' AND id = '%u'", name.c_str(), _player->GetGUIDLow(), pet->GetCharmInfo()->GetPetNumber());
     CharacterDatabase.CommitTransaction();
@@ -695,10 +733,18 @@ void WorldSession::HandlePetCastSpellOpcode(WorldPacket& recvPacket)
 
 void WorldSession::SendPetNameInvalid(uint32 error, const std::string& name)
 {
-    // [-ZERO] Need check
     WorldPacket data(SMSG_PET_NAME_INVALID, 4 + name.size() + 1 + 1);
     data << uint32(error);
     data << name;
-    data << uint8(0);                                       // possible not exist in 1.12.*
+#if defined(TBC)
+    if (declinedName)
+    {
+        data << uint8(1);
+        for (uint32 i = 0; i < MAX_DECLINED_NAME_CASES; ++i)
+            data << declinedName->name[i];
+    }
+    else
+#endif
+        data << uint8(0);
     SendPacket(&data);
 }
